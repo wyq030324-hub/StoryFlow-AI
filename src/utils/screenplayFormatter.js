@@ -1,3 +1,11 @@
+const BANNED_PREFIXES = [
+  "主题：",
+  "情感：",
+  "分析：",
+  "人物关系：",
+  "改编说明：",
+];
+
 function normalizeSceneType(value = "") {
   const text = String(value || "").toUpperCase();
 
@@ -20,6 +28,20 @@ function normalizeSceneType(value = "") {
   return "内景";
 }
 
+function sanitizeScriptLine(value = "") {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return "";
+  }
+
+  if (BANNED_PREFIXES.some((prefix) => text.startsWith(prefix))) {
+    return "";
+  }
+
+  return text;
+}
+
 function getSceneHeading(scene) {
   const heading = scene.heading || {};
   const sceneType = normalizeSceneType(scene.scene_type || scene.int_ext || heading.int_ext);
@@ -28,16 +50,10 @@ function getSceneHeading(scene) {
   return `${sceneType} ${location} ${time}`;
 }
 
-function getSceneAtmosphere(scene) {
-  return scene.scene_description || scene.heading?.atmosphere || "";
-}
-
 function getActionLines(scene) {
-  return Array.isArray(scene.action_lines)
-    ? scene.action_lines
-    : scene.action
-      ? [scene.action]
-      : [];
+  return (Array.isArray(scene.action_lines) ? scene.action_lines : [])
+    .map(sanitizeScriptLine)
+    .filter(Boolean);
 }
 
 function getDialogues(scene) {
@@ -45,14 +61,24 @@ function getDialogues(scene) {
 }
 
 function formatDialogue(dialogue) {
-  const character = dialogue.character || dialogue.name || "角色";
-  const parenthetical = dialogue.parenthetical ? `（${dialogue.parenthetical}）` : "";
-  const line = dialogue.line || dialogue.text || "";
-  return [character, parenthetical, line].filter(Boolean).join("\n");
+  const character = String(dialogue.character || dialogue.name || "角色").trim();
+  const parenthetical = sanitizeScriptLine(dialogue.parenthetical || "");
+  const line = sanitizeScriptLine(dialogue.line || dialogue.text || "");
+  const parts = [character];
+
+  if (parenthetical) {
+    parts.push(`（${parenthetical}）`);
+  }
+
+  if (line) {
+    parts.push(line);
+  }
+
+  return parts.join("\n");
 }
 
 function normalizeTransition(transition = "") {
-  const text = String(transition || "").trim();
+  const text = sanitizeScriptLine(transition);
 
   if (!text) {
     return "CUT TO:";
@@ -77,31 +103,41 @@ export function formatScreenplay(screenplayDraft) {
       const lines = [];
       const sceneNumber = scene.scene_number || index + 1;
 
-      lines.push(`第 ${sceneNumber} 场`);
+      lines.push(`第${sceneNumber}场`);
+      lines.push("");
       lines.push(getSceneHeading(scene));
       lines.push("");
 
-      const atmosphere = getSceneAtmosphere(scene);
-      if (atmosphere) {
-        lines.push(atmosphere);
-        lines.push("");
-      }
-
       getActionLines(scene).forEach((line) => {
-        if (String(line || "").trim()) {
-          lines.push(line.trim());
+        lines.push(line);
+        lines.push("");
+      });
+
+      getDialogues(scene).forEach((dialogue) => {
+        const formatted = formatDialogue(dialogue);
+        if (formatted.trim()) {
+          lines.push(formatted);
           lines.push("");
         }
       });
 
-      getDialogues(scene).forEach((dialogue) => {
-        lines.push(formatDialogue(dialogue));
+      const narrator = sanitizeScriptLine(scene.narration || scene.voice_over || "");
+      if (narrator) {
+        lines.push("旁白");
+        lines.push(narrator);
         lines.push("");
-      });
-
-      if (scene.transition || true) {
-        lines.push(normalizeTransition(scene.transition));
       }
+
+      const soundHint = sanitizeScriptLine(
+        scene.sound_design_hint?.key_sound || scene.sound_design_hint?.ambient || "",
+      );
+      if (soundHint) {
+        lines.push("音效");
+        lines.push(soundHint);
+        lines.push("");
+      }
+
+      lines.push(normalizeTransition(scene.transition));
 
       return lines.join("\n").trim();
     })

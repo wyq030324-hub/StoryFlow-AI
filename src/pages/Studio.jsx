@@ -170,10 +170,6 @@ function ModeSwitch({ value, onChange, disabled }) {
           </button>
         ))}
       </div>
-      <p className="mt-3 text-xs leading-5 text-story-muted">
-        Real AI Mode 会通过本地 Node Proxy 读取 `.env.local` 中的 DeepSeek Key，
-        不会把密钥暴露到前端代码里。
-      </p>
     </div>
   );
 }

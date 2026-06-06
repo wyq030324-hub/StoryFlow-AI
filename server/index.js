@@ -29,6 +29,18 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "2mb" }));
+app.use((error, _request, response, next) => {
+  if (error instanceof SyntaxError && "body" in error) {
+    response.status(400).json({
+      ok: false,
+      error: "INVALID_JSON_BODY",
+      message: "请求体不是合法 JSON",
+    });
+    return;
+  }
+
+  next(error);
+});
 
 function ensureNovelText(novelText) {
   if (!String(novelText || "").trim()) {
