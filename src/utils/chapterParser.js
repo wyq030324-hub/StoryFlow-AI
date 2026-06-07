@@ -15,23 +15,36 @@ function buildParagraphChunks(text) {
     return [];
   }
 
-  const targetCount = Math.min(Math.max(paragraphs.length, 1), 3);
-  const chunkSize = Math.ceil(paragraphs.length / targetCount);
+  const targetCount = Math.min(calcTargetCount(paragraphs.length), paragraphs.length);
 
   return Array.from({ length: targetCount }, (_, index) => {
+    const start = Math.floor((index * paragraphs.length) / targetCount);
+    const end = Math.floor(((index + 1) * paragraphs.length) / targetCount);
     const content = paragraphs
-      .slice(index * chunkSize, (index + 1) * chunkSize)
+      .slice(start, end)
       .join("\n\n")
       .trim();
 
     return {
       chapter_id: `chapter_${String(index + 1).padStart(3, "0")}`,
-      title: `第${index + 1}段自动拆分`,
+      title: `第${index + 1}章（自动识别）`,
       content,
       index,
       source: "paragraph",
     };
-  }).filter((chapter) => chapter.content);
+  });
+}
+
+export function calcTargetCount(paragraphCount) {
+  if (paragraphCount < 6) {
+    return 3;
+  }
+
+  if (paragraphCount < 15) {
+    return Math.max(3, Math.ceil(paragraphCount / 4));
+  }
+
+  return Math.max(3, Math.ceil(paragraphCount / 5));
 }
 
 export function detectChapters(text = "") {
@@ -87,7 +100,7 @@ export function detectChapters(text = "") {
     hasExplicitChapters: false,
     isAutoSplit: true,
     message: chapters.length
-      ? "未检测到明确章节标题，已按段落自动拆分。"
+      ? `未检测到明确章节标题，已按段落自动识别为 ${chapters.length} 章。建议在原文中添加“第X章”标题以获得更精确的章节划分。`
       : "请输入小说文本后识别章节。",
   };
 }

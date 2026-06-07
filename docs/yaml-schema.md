@@ -115,3 +115,66 @@ chapters:
 - 对导演审查：每场都有明确目的和人物信息，便于评估节奏、冲突和可拍性。
 - 对分镜生成：场景地点、时间、内外景和动作描写可直接转为镜头规划输入。
 - 对多平台短剧生产：结构化数据可以继续扩展为平台适配、角色配音、拍摄清单和版本管理。
+
+## 扩展字段说明
+
+以下字段属于高级扩展层，用于导演审查、情绪分析、声音设计、平台适配和视频生成等后续环节。基础字段已经可以支撑作者编辑剧本初稿，扩展字段则面向更专业的生产流程。
+
+### scenes 扩展字段
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `emotional_beat` | array | 场次情绪推进链，例如压抑、怀疑、紧张、爆发。可用于情绪曲线、导演审查和视频节奏设计。 |
+| `sound_design_hint` | object | 声音设计提示，包含 `ambient`、`key_sound`、`music_direction`。用于短剧配乐、音效和氛围设计。 |
+| `purpose` | string | 本场戏剧目的，说明该场承担的叙事功能，例如建立悬疑、推动关系、制造反转。 |
+| `transition` | string | 转场方式，例如 CUT TO、FADE OUT、声音转场或动作转场。 |
+
+`sound_design_hint` 建议结构：
+
+```yaml
+sound_design_hint:
+  ambient: "潮湿档案馆里的风声与远处海浪声"
+  key_sound: "档案柜滑轨发出的刺耳摩擦声"
+  music_direction: "低频弦乐，保持压抑和悬疑"
+```
+
+### 顶层扩展字段
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `theme` | string | 作品核心主题，用于统一剧本改编、导演审查和后续分镜方向。 |
+| `emotional_arc` | array/string | 全篇情感走向，可用于情绪曲线展示和节奏审查。 |
+| `adaptation_notes` | string/array | 改编总体说明，记录保留内容、压缩策略、风格方向和创作注意事项。 |
+
+### review 扩展字段
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `overall_score` | number | 导演综合评分，范围 0-100。 |
+| `dimensions` | object | 多维度评分，包含 `pacing`、`character_consistency`、`commercial_potential`、`dialogue_quality`。 |
+| `platform_analysis` | object | 平台适配分析，用于判断短剧平台、视频平台或内容社区的适配度。 |
+| `rewrite_priority` | array | 优先修改场次列表，帮助作者按影响程度和修改成本安排打磨顺序。 |
+
+`review.dimensions` 建议结构：
+
+```yaml
+review:
+  overall_score: 86
+  dimensions:
+    pacing: 84
+    character_consistency: 88
+    commercial_potential: 82
+    dialogue_quality: 87
+  platform_analysis:
+    recommendation: "适合悬疑短剧方向，建议强化前三分钟钩子。"
+  rewrite_priority:
+    - scene_id: "scene_002"
+      priority: "high"
+      reason: "情绪转折略快，需要补充人物动机。"
+```
+
+### 设计原则
+
+- 基础字段保证最低可用性，方便作者直接编辑。
+- 扩展字段服务专业生产，方便后续导演审查、分镜生成、平台适配和视频生成。
+- 基础字段与扩展字段分离，保证普通作者和高级工作流都能使用。
