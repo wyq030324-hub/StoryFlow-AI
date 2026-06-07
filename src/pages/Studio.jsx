@@ -10,6 +10,7 @@ import {
   Loader2,
   PlayCircle,
   ScrollText,
+  ShieldCheck,
   Sparkles,
   UsersRound,
   Wand2,
@@ -17,50 +18,23 @@ import {
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { runAdaptationPlanner } from "../agents/adaptationPlanner.js";
 import { runDirectorReviewer } from "../agents/directorReviewer.js";
-import { runOriginalAnalyzer } from "../agents/originalAnalyzer.js";
 import { runScreenplayWriter } from "../agents/screenplayWriter.js";
+import { characterGraph as mockCharacterGraph } from "../data/characterGraph.js";
 import {
-  AGENT_FLOW,
   AGENT_KEYS,
   storyActionTypes,
   useStory,
 } from "../context/StoryContext.jsx";
-import { runRealWorkflow } from "../services/aiClient.js";
+import {
+  runOptionalCharacterGraph,
+  runOptionalDirectorReview,
+  runOptionalPlatformAnalysis,
+  runOptionalRewriteSuggestions,
+  runScriptOnlyWorkflow,
+} from "../services/aiClient.js";
 import { formatScreenplay } from "../utils/screenplayFormatter.js";
 import { generateYaml } from "../utils/yamlFormatter.js";
-
-const agentDelays = {
-  [AGENT_KEYS.originalAnalyzer]: 400,
-  [AGENT_KEYS.adaptationPlanner]: 400,
-  [AGENT_KEYS.screenplayWriter]: 450,
-  [AGENT_KEYS.directorReviewer]: 400,
-  [AGENT_KEYS.yamlExporter]: 350,
-};
-
-const agentDisplayNames = {
-  [AGENT_KEYS.originalAnalyzer]: "原著分析 Agent",
-  [AGENT_KEYS.adaptationPlanner]: "改编规划 Agent",
-  [AGENT_KEYS.screenplayWriter]: "剧本生成 Agent",
-  [AGENT_KEYS.directorReviewer]: "导演审查 Agent",
-  [AGENT_KEYS.yamlExporter]: "YAML 导出 Agent",
-};
-
-const runningMessages = {
-  [AGENT_KEYS.originalAnalyzer]: "原著分析 Agent 正在拆解人物动机……",
-  [AGENT_KEYS.adaptationPlanner]: "改编规划 Agent 正在重组剧情节奏……",
-  [AGENT_KEYS.screenplayWriter]: "剧本生成 Agent 正在生成专业剧本……",
-  [AGENT_KEYS.directorReviewer]: "导演审查 Agent 正在评估平台适配度……",
-  [AGENT_KEYS.yamlExporter]: "YAML 导出 Agent 正在整理结构化结果……",
-};
-
-const statusLabel = {
-  waiting: "等待中",
-  running: "处理中",
-  done: "已完成",
-  error: "失败",
-};
 
 const statusClass = {
   waiting: "border-story-border text-story-muted",
@@ -68,6 +42,13 @@ const statusClass = {
     "animate-pulse border-story-gold bg-story-gold/10 text-story-gold shadow-[0_0_30px_rgba(201,169,110,0.16)]",
   done: "border-story-success bg-story-success/10 text-story-success",
   error: "border-red-400 bg-red-950/20 text-red-300",
+};
+
+const statusLabel = {
+  waiting: "等待中",
+  running: "处理中",
+  done: "已完成",
+  error: "失败",
 };
 
 function delay(ms) {
@@ -78,23 +59,6 @@ function delay(ms) {
 
 function getDialogues(scene) {
   return scene?.dialogues || scene?.dialogue || [];
-}
-
-function formatEmotionalArc(value) {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === "string") {
-          return item;
-        }
-
-        return item.emotion || item.beat || "";
-      })
-      .filter(Boolean)
-      .join(" → ");
-  }
-
-  return value || "等待生成";
 }
 
 function getIssues(reviewResult) {
@@ -170,11 +134,16 @@ function ModeSwitch({ value, onChange, disabled }) {
           </button>
         ))}
       </div>
-      <p className="mt-3 text-xs leading-5 text-story-muted">
-        Real AI Mode 会通过本地 Node Proxy 读取 `.env.local` 中的 DeepSeek Key，
-        不会把密钥暴露到前端代码里。
-      </p>
     </div>
+  );
+}
+
+function OptionalResultBlock({ title, children }) {
+  return (
+    <article className="rounded-lg border border-story-border bg-story-bg/70 p-4 text-sm leading-7 text-story-muted">
+      <h3 className="font-serif text-lg text-story-text">{title}</h3>
+      <div className="mt-3">{children}</div>
+    </article>
   );
 }
 
@@ -184,23 +153,19 @@ function Studio() {
   const [copyState, setCopyState] = useState("idle");
   const [scriptCopyState, setScriptCopyState] = useState("idle");
   const [isYamlVisible, setIsYamlVisible] = useState(false);
-  const [pendingAgentKey, setPendingAgentKey] = useState(null);
+  const [optionalLoading, setOptionalLoading] = useState(null);
   const screenplayRef = useRef(null);
 
-  const isRunning = useMemo(
-    () => Object.values(state.agentStatus).includes("running"),
-    [state.agentStatus],
-  );
+  const isRunning = state.agentStatus[AGENT_KEYS.screenplayWriter] === "running";
   const canStart = Boolean(state.novelInput.content.trim()) && !isRunning;
   const scriptText = useMemo(
     () => formatScreenplay(state.screenplayDraft),
     [state.screenplayDraft],
   );
-  const runningAgent =
-    AGENT_FLOW.find((agentKey) => state.agentStatus[agentKey] === "running") || pendingAgentKey;
   const scenes = state.screenplayDraft?.scenes || state.scenes || [];
   const dialogueCount = scenes.reduce((total, scene) => total + getDialogues(scene).length, 0);
   const characterCount =
+    state.characterGraph?.nodes?.length ||
     state.analysisResult?.characters?.length ||
     new Set(scenes.flatMap((scene) => scene.characters || scene.characters_present || [])).size;
   const reviewScores = Object.values(state.reviewResult?.scores || {}).filter(
@@ -209,6 +174,30 @@ function Studio() {
   const adaptationScore = reviewScores.length
     ? Math.round(reviewScores.reduce((sum, score) => sum + score, 0) / reviewScores.length)
     : "待评估";
+
+  const pipelineSteps = [
+    {
+      id: "input",
+      index: "01",
+      label: "小说输入",
+      description: "准备原文",
+      status: state.novelInput.content.trim() ? "done" : "waiting",
+    },
+    {
+      id: "script",
+      index: "02",
+      label: "剧本生成",
+      description: "只生成剧本正文",
+      status: state.agentStatus[AGENT_KEYS.screenplayWriter] || "waiting",
+    },
+    {
+      id: "output",
+      index: "03",
+      label: "结果输出",
+      description: "展示完整剧本",
+      status: scriptText ? "done" : "waiting",
+    },
+  ];
 
   function updateNovelInput(payload) {
     dispatch({
@@ -242,93 +231,18 @@ function Studio() {
     setIsYamlVisible(false);
   }
 
-  function closeError() {
-    dispatch({ type: storyActionTypes.RESET_WORKFLOW });
-  }
-
-  async function applyWorkflowResults(result) {
-    dispatch({ type: storyActionTypes.SET_ANALYSIS_RESULT, payload: result.analysisResult });
-    dispatch({ type: storyActionTypes.SET_AGENT_DONE, payload: AGENT_KEYS.originalAnalyzer });
-
-    await delay(agentDelays[AGENT_KEYS.adaptationPlanner]);
-    dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.adaptationPlanner });
-    dispatch({ type: storyActionTypes.SET_ADAPTATION_PLAN, payload: result.adaptationPlan });
-    dispatch({ type: storyActionTypes.SET_AGENT_DONE, payload: AGENT_KEYS.adaptationPlanner });
-
-    await delay(agentDelays[AGENT_KEYS.screenplayWriter]);
-    dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.screenplayWriter });
-    dispatch({ type: storyActionTypes.SET_SCREENPLAY_DRAFT, payload: result.screenplayDraft });
-    dispatch({ type: storyActionTypes.SET_AGENT_DONE, payload: AGENT_KEYS.screenplayWriter });
-
-    await delay(agentDelays[AGENT_KEYS.directorReviewer]);
-    dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.directorReviewer });
-    dispatch({
-      type: storyActionTypes.SET_REVIEW_RESULT,
-      payload: {
-        reviewResult: result.reviewResult,
-        characterGraph: result.characterGraph || null,
-        directorRoom: result.directorRoom || null,
+  async function runDemoScriptOnly() {
+    await delay(500);
+    return runScreenplayWriter(
+      {
+        adaptation_strategy: "保留核心悬疑主线，转化为可拍摄的短剧场景。",
       },
-    });
-    dispatch({ type: storyActionTypes.SET_AGENT_DONE, payload: AGENT_KEYS.directorReviewer });
-
-    await delay(agentDelays[AGENT_KEYS.yamlExporter]);
-    dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.yamlExporter });
-    dispatch({
-      type: storyActionTypes.SET_GENERATED_YAML,
-      payload: generateYaml(result.screenplayDraft, result.reviewResult),
-    });
-    dispatch({ type: storyActionTypes.SET_AGENT_DONE, payload: AGENT_KEYS.yamlExporter });
-  }
-
-  async function runDemoWorkflow() {
-    dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.originalAnalyzer });
-    const analysisResult = await runOriginalAnalyzer(state.novelInput);
-    const adaptationPlan = await runAdaptationPlanner(analysisResult);
-    const screenplayDraft = await runScreenplayWriter(
-      adaptationPlan,
-      analysisResult,
+      {
+        chapter_source: state.novelInput.title,
+        theme: "记忆、潮汐与自我追寻",
+      },
       state.novelInput,
     );
-    const reviewResult = await runDirectorReviewer(screenplayDraft, adaptationPlan);
-
-    await applyWorkflowResults({
-      analysisResult,
-      adaptationPlan,
-      screenplayDraft,
-      reviewResult,
-      characterGraph: state.characterGraph,
-      directorRoom: state.directorRoom,
-    });
-  }
-
-  async function runRealAiWorkflow() {
-    dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.originalAnalyzer });
-    setPendingAgentKey(AGENT_KEYS.originalAnalyzer);
-
-    const agentSequence = [
-      AGENT_KEYS.originalAnalyzer,
-      AGENT_KEYS.adaptationPlanner,
-      AGENT_KEYS.screenplayWriter,
-      AGENT_KEYS.directorReviewer,
-    ];
-
-    let stepIndex = 0;
-    const hintTimer = window.setInterval(() => {
-      stepIndex = Math.min(stepIndex + 1, agentSequence.length - 1);
-      setPendingAgentKey(agentSequence[stepIndex]);
-    }, 1800);
-
-    try {
-      const workflowResult = await runRealWorkflow(state.novelInput.content);
-      window.clearInterval(hintTimer);
-      setPendingAgentKey(null);
-      await applyWorkflowResults(workflowResult);
-    } catch (error) {
-      window.clearInterval(hintTimer);
-      setPendingAgentKey(null);
-      throw error;
-    }
   }
 
   async function startWorkflow() {
@@ -336,7 +250,7 @@ function Studio() {
       dispatch({
         type: storyActionTypes.SET_AGENT_ERROR,
         payload: {
-          agent: AGENT_KEYS.originalAnalyzer,
+          agent: AGENT_KEYS.screenplayWriter,
           error: "请先输入小说内容，或点击加载示例小说。",
         },
       });
@@ -345,25 +259,128 @@ function Studio() {
 
     try {
       dispatch({ type: storyActionTypes.START_WORKFLOW });
+      dispatch({ type: storyActionTypes.SET_AGENT_RUNNING, payload: AGENT_KEYS.screenplayWriter });
       setCopyState("idle");
       setScriptCopyState("idle");
       setIsYamlVisible(false);
 
-      if (aiMode === "real") {
-        await runRealAiWorkflow();
-      } else {
-        await runDemoWorkflow();
+      const result =
+        aiMode === "real"
+          ? await runScriptOnlyWorkflow(state.novelInput.content)
+          : { screenplayDraft: await runDemoScriptOnly() };
+
+      dispatch({
+        type: storyActionTypes.SET_SCREENPLAY_DRAFT,
+        payload: result.screenplayDraft,
+      });
+      dispatch({ type: storyActionTypes.SET_AGENT_DONE, payload: AGENT_KEYS.screenplayWriter });
+    } catch (error) {
+      dispatch({
+        type: storyActionTypes.SET_AGENT_ERROR,
+        payload: {
+          agent: AGENT_KEYS.screenplayWriter,
+          error:
+            error.message ||
+            "剧本生成失败，请检查 API Key、网络连接或本地 server 是否已启动。",
+        },
+      });
+    }
+  }
+
+  async function runOptionalTask(kind) {
+    if (!state.screenplayDraft) {
+      dispatch({
+        type: storyActionTypes.SET_AGENT_ERROR,
+        payload: {
+          agent: AGENT_KEYS.screenplayWriter,
+          error: "请先生成剧本，再使用增强分析功能。",
+        },
+      });
+      return;
+    }
+
+    setOptionalLoading(kind);
+
+    try {
+      if (kind === "characterGraph") {
+        const result =
+          aiMode === "real"
+            ? await runOptionalCharacterGraph(
+                state.novelInput.content,
+                state.screenplayDraft,
+                state.analysisResult,
+              )
+            : mockCharacterGraph;
+        dispatch({ type: storyActionTypes.SET_CHARACTER_GRAPH, payload: result });
+      }
+
+      if (kind === "directorReview") {
+        const result =
+          aiMode === "real"
+            ? await runOptionalDirectorReview(state.novelInput.content, state.screenplayDraft)
+            : await runDirectorReviewer(state.screenplayDraft, state.adaptationPlan || {});
+        dispatch({ type: storyActionTypes.SET_REVIEW_RESULT, payload: result });
+      }
+
+      if (kind === "platformAnalysis") {
+        const result =
+          aiMode === "real"
+            ? await runOptionalPlatformAnalysis(
+                state.novelInput.content,
+                state.screenplayDraft,
+                state.reviewResult,
+                state.characterGraph,
+              )
+            : {
+                short_drama_score: 86,
+                platform_analysis: {
+                  douyin: {
+                    score: 88,
+                    hook_potential: "开场悬疑钩子清晰，适合短节奏切入。",
+                    risk: "世界观信息需要更快视觉化。",
+                  },
+                  kuaishou: {
+                    score: 82,
+                    hook_potential: "亲情与身份追寻具备连续追看动机。",
+                    risk: "概念表达不能过重。",
+                  },
+                  bilibili: {
+                    score: 84,
+                    hook_potential: "悬疑奇幻设定适合长评与二创讨论。",
+                    risk: "需要保留更强作者风格。",
+                  },
+                  overall_recommendation:
+                    "适合悬疑短剧化，建议每集结尾保留一个记忆被改写的强钩子。",
+                },
+              };
+        dispatch({ type: storyActionTypes.SET_DIRECTOR_ROOM, payload: result });
+      }
+
+      if (kind === "rewriteSuggestions") {
+        const result =
+          aiMode === "real"
+            ? await runOptionalRewriteSuggestions(state.novelInput.content, state.screenplayDraft)
+            : {
+                new_style_positioning: "悬疑短剧强化版",
+                new_core_conflict: "主角必须在亲情真相与城市规则之间做选择。",
+                director_notes: [
+                  "把第一场结尾改成更强钩子。",
+                  "提前让反派力量产生可见后果。",
+                  "减少规则解释，用动作与道具承载信息。",
+                ],
+              };
+        dispatch({ type: storyActionTypes.SET_REWRITE_SUGGESTIONS, payload: result });
       }
     } catch (error) {
       dispatch({
         type: storyActionTypes.SET_AGENT_ERROR,
         payload: {
-          agent: runningAgent || AGENT_KEYS.originalAnalyzer,
-          error:
-            error.message ||
-            "真实 AI 调用失败，请检查 API Key、网络连接或本地 server 是否已启动。",
+          agent: AGENT_KEYS.screenplayWriter,
+          error: error.message || "增强分析生成失败，请稍后重试。",
         },
       });
+    } finally {
+      setOptionalLoading(null);
     }
   }
 
@@ -397,30 +414,30 @@ function Studio() {
     });
   }
 
+  function toggleYaml() {
+    if (!state.generatedYaml && state.screenplayDraft) {
+      dispatch({
+        type: storyActionTypes.SET_GENERATED_YAML,
+        payload: generateYaml(state.screenplayDraft, state.reviewResult),
+      });
+    }
+
+    setIsYamlVisible((visible) => !visible);
+  }
+
   return (
     <div className="space-y-8">
       {state.error ? (
         <section className="flex flex-col gap-3 rounded-lg border border-red-400 bg-red-950/20 px-4 py-3 text-sm text-red-300 md:flex-row md:items-center md:justify-between">
           <p>{state.error}</p>
-          <div className="flex gap-2">
-            {aiMode === "real" ? (
-              <button
-                type="button"
-                onClick={() => setAiMode("mock")}
-                className="rounded-md border border-red-400/50 px-3 py-1.5 transition hover:bg-red-400/10"
-              >
-                切回 Demo Mode
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={closeError}
-              className="rounded-md border border-red-400/50 p-1 transition hover:bg-red-400/10"
-              aria-label="关闭错误提示"
-            >
-              <X size={14} aria-hidden="true" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: storyActionTypes.RESET_WORKFLOW })}
+            className="self-start rounded-md border border-red-400/50 p-1 transition hover:bg-red-400/10 md:self-auto"
+            aria-label="关闭错误提示"
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
         </section>
       ) : null}
 
@@ -435,7 +452,7 @@ function Studio() {
               输入小说，生成专业影视剧本
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-story-muted md:text-base md:leading-8">
-              输入小说后，系统将自动完成故事拆解、人物关系分析、剧本生成与导演审查。
+              当前主流程已优化为“小说输入 → 剧本生成 → 结果输出”。人物情感宇宙、导演审查、平台分析和改写建议改为自愿生成，避免占用剧本生成的 token 与等待时间。
             </p>
           </div>
           <Link
@@ -454,7 +471,7 @@ function Studio() {
               <p className="text-sm text-story-gold">Novel Input</p>
               <h2 className="mt-1 font-serif text-2xl font-semibold">小说输入区</h2>
               <p className="mt-2 text-sm leading-6 text-story-muted">
-                可以直接粘贴任意小说片段，也可以使用示例文本快速演示完整工作流。
+                粘贴小说片段后点击生成剧本。主按钮只调用剧本生成 Agent，不会自动触发其他分析能力。
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -465,7 +482,7 @@ function Studio() {
                 className="inline-flex items-center gap-2 rounded-md border border-story-border bg-story-bg px-4 py-3 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Database size={16} aria-hidden="true" />
-                使用示例文本
+                加载示例小说
               </button>
               <button
                 type="button"
@@ -487,7 +504,7 @@ function Studio() {
                 ) : (
                   <PlayCircle size={16} aria-hidden="true" />
                 )}
-                开始 AI 改编
+                生成剧本
               </button>
             </div>
           </div>
@@ -514,7 +531,7 @@ function Studio() {
             disabled={isRunning}
             rows={14}
             className="mt-2 w-full resize-y rounded-md border border-story-border bg-story-bg px-3 py-3 text-sm leading-7 text-story-text outline-none transition placeholder:text-story-muted focus:border-story-gold disabled:opacity-60"
-            placeholder="粘贴小说片段，或点击使用示例文本"
+            placeholder="粘贴小说片段，或点击加载示例小说"
           />
         </article>
 
@@ -524,8 +541,8 @@ function Studio() {
       <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-story-gold">Agent Pipeline</p>
-            <h2 className="mt-1 font-serif text-2xl font-semibold">AI Agent 流水线</h2>
+            <p className="text-sm text-story-gold">Script Only Flow</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold">主链路：小说到剧本</h2>
           </div>
           <div className="flex flex-wrap gap-3">
             <p className="text-sm text-story-muted">
@@ -543,13 +560,13 @@ function Studio() {
           </div>
         </div>
 
-        <ol className="mt-5 grid gap-3 md:grid-cols-5">
-          {AGENT_FLOW.map((agentKey, index) => {
-            const status = state.agentStatus[agentKey] || "waiting";
+        <ol className="mt-5 grid gap-3 md:grid-cols-3">
+          {pipelineSteps.map((step) => {
+            const status = step.status || "waiting";
 
             return (
               <li
-                key={agentKey}
+                key={step.id}
                 className={`relative overflow-hidden rounded-lg border px-4 py-4 text-sm transition ${
                   statusClass[status] || statusClass.waiting
                 }`}
@@ -560,8 +577,9 @@ function Studio() {
                     aria-hidden="true"
                   />
                 ) : null}
-                <span className="text-xs text-story-muted">0{index + 1}</span>
-                <p className="mt-2 font-medium">{agentDisplayNames[agentKey]}</p>
+                <span className="text-xs text-story-muted">{step.index}</span>
+                <p className="mt-2 font-medium">{step.label}</p>
+                <p className="mt-1 text-xs text-story-muted">{step.description}</p>
                 <p className="mt-3 text-xs">{statusLabel[status] || status}</p>
               </li>
             );
@@ -571,11 +589,11 @@ function Studio() {
         <div className="mt-5 rounded-lg border border-story-border bg-story-bg/70 p-4">
           <p className="text-sm text-story-muted">执行状态</p>
           <p className="mt-2 text-sm text-story-text">
-            {runningAgent
-              ? runningMessages[runningAgent]
-              : state.generatedYaml
-                ? "剧本改编已完成，可继续查看完整剧本、人物关系和导演审查报告。"
-                : "请输入小说内容并启动工作流。"}
+            {isRunning
+              ? "正在生成剧本，请稍候……"
+              : scriptText
+                ? "剧本已生成。你可以继续查看完整剧本，或按需生成增强分析。"
+                : "请输入小说内容并点击生成剧本。"}
           </p>
         </div>
       </section>
@@ -589,7 +607,7 @@ function Studio() {
             <p className="text-sm text-story-gold">Professional Screenplay</p>
             <h2 className="mt-1 font-serif text-3xl font-semibold">完整剧本</h2>
             <p className="mt-1 text-sm text-story-muted">
-              使用专业影视剧本格式输出，方便导演和编剧直接阅读。
+              这里展示主链路唯一生成结果：正式剧本正文。
             </p>
           </div>
           <button
@@ -609,7 +627,7 @@ function Studio() {
 
         {!scriptText ? (
           <div className="mt-5 rounded-lg border border-story-border bg-story-bg/70 p-6 text-sm text-story-muted">
-            请先加载示例小说或输入新小说，然后开始 AI 改编。
+            请先加载示例小说或输入新小说，然后点击生成剧本。
           </div>
         ) : (
           <div className="mt-5 overflow-hidden rounded-lg border border-story-gold/40 bg-story-bg">
@@ -617,20 +635,8 @@ function Studio() {
               <h3 className="font-serif text-2xl font-semibold">
                 《{state.screenplayDraft?.screenplay?.title || state.novelInput.title || "未命名剧本"}》
               </h3>
-              <div className="mt-3 grid gap-3 text-sm text-story-muted md:grid-cols-2">
-                <p>
-                  <span className="text-story-gold">主题：</span>
-                  {state.screenplayDraft?.theme || state.analysisResult?.theme || "等待生成"}
-                </p>
-                <p>
-                  <span className="text-story-gold">情感走向：</span>
-                  {formatEmotionalArc(
-                    state.screenplayDraft?.emotional_arc || state.analysisResult?.emotional_arc,
-                  )}
-                </p>
-              </div>
             </div>
-            <pre className="max-h-[760px] overflow-auto whitespace-pre-wrap px-4 py-5 font-mono text-sm leading-8 text-story-text">
+            <pre className="max-h-[760px] overflow-auto whitespace-pre-wrap break-words px-4 py-5 font-mono text-sm leading-8 text-story-text">
               {scriptText}
             </pre>
           </div>
@@ -640,91 +646,148 @@ function Studio() {
       <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-story-gold">Director Review</p>
-            <h2 className="mt-1 font-serif text-2xl font-semibold">导演审查报告</h2>
+            <p className="text-sm text-story-gold">Optional Analysis</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold">增强分析：按需生成</h2>
+            <p className="mt-2 text-sm leading-6 text-story-muted">
+              这些能力不会随“生成剧本”自动执行。只有点击对应按钮时，才会请求 API 或生成本地 Demo 结果。
+            </p>
           </div>
-          {scriptText ? (
-            <button
-              type="button"
-              onClick={scrollToScreenplay}
-              className="rounded-md border border-story-gold/70 px-4 py-2 text-sm text-story-gold transition hover:bg-story-gold/10"
-            >
-              回到完整剧本
-            </button>
-          ) : null}
         </div>
 
-        {!state.reviewResult ? (
-          <div className="mt-5 rounded-lg border border-story-border bg-story-bg/70 p-6 text-sm text-story-muted">
-            导演审查会在剧本生成后自动出现。
-          </div>
-        ) : (
-          <>
-            <div className="mt-5 grid gap-4 md:grid-cols-4">
-              {getScoreCards(state.reviewResult).map((card) => (
-                <article
-                  key={card.label}
-                  className="rounded-lg border border-story-border bg-story-bg/80 p-4"
-                >
-                  <p className="text-sm text-story-muted">{card.label}</p>
-                  <p className="mt-3 font-serif text-4xl text-story-gold">{card.value}</p>
-                </article>
-              ))}
-            </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
+          {[
+            ["characterGraph", UsersRound, "生成人物情感宇宙"],
+            ["directorReview", ShieldCheck, "生成导演审查"],
+            ["platformAnalysis", Activity, "生成平台分析"],
+            ["rewriteSuggestions", Wand2, "生成改写建议"],
+          ].map(([kind, Icon, label]) => (
+            <button
+              key={kind}
+              type="button"
+              disabled={!scriptText || Boolean(optionalLoading)}
+              onClick={() => runOptionalTask(kind)}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border bg-story-bg px-4 py-3 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {optionalLoading === kind ? (
+                <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Icon size={16} aria-hidden="true" />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
 
-            <div className="mt-5 grid gap-5 lg:grid-cols-2">
-              <div>
-                <h3 className="font-serif text-xl text-story-text">问题清单</h3>
-                <div className="mt-3 space-y-3">
-                  {getIssues(state.reviewResult).length ? (
-                    getIssues(state.reviewResult).map((issue, index) => (
-                      <article
-                        key={`${issue.scene_id || "issue"}-${index}`}
-                        className="rounded-lg border border-story-border bg-story-bg/80 p-4 text-sm leading-6 text-story-muted"
-                      >
-                        <p className="text-story-text">{issue.problem || issue.type}</p>
-                        {issue.suggestion ? (
-                          <p className="mt-2 text-story-gold">{issue.suggestion}</p>
-                        ) : null}
-                      </article>
-                    ))
-                  ) : (
-                    <p className="text-sm text-story-muted">暂无明显问题。</p>
-                  )}
-                </div>
-              </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {state.characterGraph ? (
+            <OptionalResultBlock title="人物情感宇宙已生成">
+              <p>已生成 {state.characterGraph.nodes?.length || 0} 个人物节点和 {state.characterGraph.edges?.length || 0} 条关系线。</p>
+              <Link className="mt-3 inline-flex text-story-gold hover:underline" to="/characters">
+                前往人物感情线
+              </Link>
+            </OptionalResultBlock>
+          ) : null}
 
-              <div>
-                <h3 className="font-serif text-xl text-story-text">修正建议</h3>
-                <div className="mt-3 space-y-3">
-                  {getSuggestions(state.reviewResult).length ? (
-                    getSuggestions(state.reviewResult).map((suggestion) => (
-                      <p
-                        key={suggestion}
-                        className="rounded-lg border border-story-border bg-story-bg/80 p-4 text-sm leading-6 text-story-muted"
-                      >
-                        {suggestion}
-                      </p>
-                    ))
-                  ) : (
-                    <p className="text-sm text-story-muted">暂无修正建议。</p>
-                  )}
-                </div>
+          {state.reviewResult ? (
+            <OptionalResultBlock title="导演审查已生成">
+              <div className="grid gap-3 sm:grid-cols-4">
+                {getScoreCards(state.reviewResult).map((card) => (
+                  <div key={card.label} className="rounded-md border border-story-border p-3">
+                    <p className="text-xs text-story-muted">{card.label}</p>
+                    <p className="mt-1 font-serif text-2xl text-story-gold">{card.value}</p>
+                  </div>
+                ))}
               </div>
-            </div>
-          </>
-        )}
+              <Link className="mt-3 inline-flex text-story-gold hover:underline" to="/review">
+                查看导演审查报告
+              </Link>
+            </OptionalResultBlock>
+          ) : null}
+
+          {state.directorRoom ? (
+            <OptionalResultBlock title="平台分析已生成">
+              <p>短剧评分：{state.directorRoom.short_drama_score || "待评估"}</p>
+              <p className="mt-2">
+                {state.directorRoom.platform_analysis?.overall_recommendation ||
+                  state.directorRoom.director_notes?.[0] ||
+                  "已生成平台适配分析。"}
+              </p>
+            </OptionalResultBlock>
+          ) : null}
+
+          {state.rewriteSuggestions ? (
+            <OptionalResultBlock title="改写建议已生成">
+              <p>
+                {state.rewriteSuggestions.new_style_positioning ||
+                  state.rewriteSuggestions.new_core_conflict ||
+                  "已生成改写建议。"}
+              </p>
+            </OptionalResultBlock>
+          ) : null}
+        </div>
       </section>
+
+      {state.reviewResult ? (
+        <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="text-sm text-story-gold">Director Review</p>
+              <h2 className="mt-1 font-serif text-2xl font-semibold">导演审查摘要</h2>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div>
+              <h3 className="font-serif text-xl text-story-text">问题清单</h3>
+              <div className="mt-3 space-y-3">
+                {getIssues(state.reviewResult).length ? (
+                  getIssues(state.reviewResult).map((issue, index) => (
+                    <article
+                      key={`${issue.scene_id || "issue"}-${index}`}
+                      className="rounded-lg border border-story-border bg-story-bg/80 p-4 text-sm leading-6 text-story-muted"
+                    >
+                      <p className="text-story-text">{issue.problem || issue.type}</p>
+                      {issue.suggestion ? (
+                        <p className="mt-2 text-story-gold">{issue.suggestion}</p>
+                      ) : null}
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-story-muted">暂无明显问题。</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-serif text-xl text-story-text">修正建议</h3>
+              <div className="mt-3 space-y-3">
+                {getSuggestions(state.reviewResult).length ? (
+                  getSuggestions(state.reviewResult).map((suggestion) => (
+                    <p
+                      key={suggestion}
+                      className="rounded-lg border border-story-border bg-story-bg/80 p-4 text-sm leading-6 text-story-muted"
+                    >
+                      {suggestion}
+                    </p>
+                  ))
+                ) : (
+                  <p className="text-sm text-story-muted">暂无修正建议。</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section>
         <div className="mb-4">
           <p className="text-sm text-story-gold">Overview</p>
-          <h2 className="mt-1 font-serif text-2xl font-semibold">数据统计卡片</h2>
+          <h2 className="mt-1 font-serif text-2xl font-semibold">项目数据概览</h2>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <StatCard label="人物数" value={characterCount} icon={UsersRound} />
-          <StatCard label="场景数" value={scenes.length} icon={ScrollText} />
-          <StatCard label="对白数" value={dialogueCount} icon={Clipboard} />
+          <StatCard label="场景数" value={scenes.length || "文本"} icon={ScrollText} />
+          <StatCard label="对白数" value={dialogueCount || "待解析"} icon={Clipboard} />
           <StatCard
             label="情感峰值"
             value={state.reviewResult?.scores?.emotion_score || "待检测"}
@@ -736,7 +799,7 @@ function Studio() {
 
       <section className="grid gap-4 lg:grid-cols-4">
         {[
-          ["/characters", UsersRound, "人物关系", "查看角色关系与叙事图谱"],
+          ["/characters", UsersRound, "人物感情线", "查看角色关系与叙事图谱"],
           ["/rewrite", Wand2, "创意重构", "尝试不同导演风格"],
           ["/comparison", GitCompare, "原著对照", "追踪原文与 Scene 对应"],
           ["/review", ScrollText, "导演审查", "阅读专业审查建议"],
@@ -759,14 +822,14 @@ function Studio() {
             <p className="text-sm text-story-muted">技术交付</p>
             <h2 className="font-serif text-2xl font-semibold">查看技术结构 / YAML 导出</h2>
             <p className="mt-1 text-sm text-story-muted">
-              YAML 面向后续分镜、配音、短剧生成和多模型审查，默认折叠，不干扰剧本阅读。
+              YAML 默认折叠，面向后续分镜、配音、短剧生成和多模型审查。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
-              onClick={() => setIsYamlVisible((visible) => !visible)}
-              disabled={!state.generatedYaml}
+              onClick={toggleYaml}
+              disabled={!state.screenplayDraft}
               className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FileCode2 size={16} aria-hidden="true" />
@@ -794,7 +857,7 @@ function Studio() {
             value={state.generatedYaml}
             rows={16}
             className="mt-4 w-full resize-y rounded-md border border-story-gold/40 bg-story-bg px-3 py-3 font-mono text-xs leading-6 text-story-text outline-none"
-            placeholder="流程完成后，YAML 将在这里生成。"
+            placeholder="生成剧本后，可以在这里查看技术结构。"
           />
         ) : null}
       </section>

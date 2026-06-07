@@ -1,3 +1,5 @@
+import { normalizeEmotionalArc } from "./emotionalArc.js";
+
 function quote(value) {
   if (value === null || value === undefined || value === "") {
     return '""';
@@ -43,18 +45,22 @@ function getHeading(scene) {
 }
 
 function getActionLines(scene) {
-  return scene.action_lines || (scene.action ? [scene.action] : []);
+  return Array.isArray(scene.action_lines)
+    ? scene.action_lines
+    : scene.action
+      ? [scene.action]
+      : [];
 }
 
 function getDialogues(scene) {
-  return scene.dialogues || scene.dialogue || [];
+  return Array.isArray(scene.dialogues) ? scene.dialogues : scene.dialogue || [];
 }
 
 export function generateYaml(screenplayDraft, reviewResult) {
   const draft = screenplayDraft || {};
   const screenplay = draft.screenplay || {};
   const scenes = draft.scenes || [];
-  const emotionalArc = draft.emotional_arc || [];
+  const emotionalArc = normalizeEmotionalArc(draft.emotional_arc, "yaml.emotionalArc");
   const review = reviewResult || {};
   const scores = review.scores || {};
   const lines = [];
@@ -69,8 +75,7 @@ export function generateYaml(screenplayDraft, reviewResult) {
   lines.push("emotional_arc:");
   if (emotionalArc.length) {
     emotionalArc.forEach((beat) => {
-      lines.push(`  - beat: ${quote(beat.beat)}`);
-      lines.push(`    emotion: ${quote(beat.emotion)}`);
+      lines.push(`  - ${quote(beat)}`);
     });
   } else {
     lines.push("  []");
@@ -86,19 +91,15 @@ export function generateYaml(screenplayDraft, reviewResult) {
 
       lines.push(`  - scene_id: ${quote(getSceneId(scene))}`);
       lines.push(`    scene_number: ${scene.scene_number ?? scene.order ?? 0}`);
-      lines.push(`    order: ${scene.order ?? 0}`);
-      lines.push(`    title: ${quote(scene.title)}`);
-      lines.push(`    int_ext: ${quote(scene.int_ext || heading.int_ext)}`);
+      lines.push(`    int_ext: ${quote(scene.int_ext || scene.scene_type || heading.int_ext)}`);
       lines.push(`    location: ${quote(scene.location || heading.location)}`);
       lines.push(`    time: ${quote(scene.time || scene.timeOfDay || heading.time)}`);
-      lines.push(`    scene_description: ${quote(scene.scene_description || heading.atmosphere)}`);
+      lines.push(`    purpose: ${quote(scene.purpose || scene.dramatic_purpose || "")}`);
       lines.push("    heading:");
       lines.push(`      int_ext: ${quote(heading.int_ext)}`);
       lines.push(`      location: ${quote(heading.location)}`);
       lines.push(`      time: ${quote(heading.time)}`);
       lines.push(`      atmosphere: ${quote(heading.atmosphere)}`);
-      lines.push(`    dramatic_purpose: ${quote(scene.dramatic_purpose || scene.purpose || scene.summary)}`);
-      lines.push(`    purpose: ${quote(scene.purpose || scene.dramatic_purpose || scene.summary)}`);
       lines.push("    characters_present:");
       lines.push(...listValues(characters, 6));
       lines.push("    action_lines:");
@@ -114,7 +115,7 @@ export function generateYaml(screenplayDraft, reviewResult) {
       if (dialogues.length) {
         dialogues.forEach((dialogue) => {
           lines.push(`      - character: ${quote(dialogue.character)}`);
-          lines.push(`        line: ${quote(dialogue.line)}`);
+          lines.push(`        line: ${quote(dialogue.line || dialogue.text)}`);
         });
       } else {
         lines.push("      []");

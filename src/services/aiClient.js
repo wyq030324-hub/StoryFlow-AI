@@ -54,3 +54,58 @@ export async function runRealWorkflow(novelText) {
     source: "real",
   };
 }
+
+export async function runScriptOnlyWorkflow(novelText) {
+  const data = await postJson("/api/script/generate", {
+    novelText,
+  });
+
+  return {
+    screenplayDraft: data.screenplayDraft,
+    source: "real",
+  };
+}
+
+export async function runOptionalDirectorReview(novelText, screenplayDraft) {
+  const data = await postJson("/api/optional/director-review", {
+    novelText,
+    screenplayDraft,
+  });
+
+  return data.reviewResult;
+}
+
+export async function runOptionalCharacterGraph(novelText, screenplayDraft, analysisResult = null) {
+  const data = await postJson("/api/optional/character-graph", {
+    novelText,
+    screenplayDraft,
+    analysisResult,
+  });
+
+  return data.characterGraph;
+}
+
+export async function runOptionalPlatformAnalysis(
+  novelText,
+  screenplayDraft,
+  reviewResult = null,
+  characterGraph = null,
+) {
+  const data = await postJson("/api/optional/platform-analysis", {
+    novelText,
+    screenplayDraft,
+    reviewResult,
+    characterGraph,
+  });
+
+  return data.directorRoom;
+}
+
+export async function runOptionalRewriteSuggestions(novelText, screenplayDraft) {
+  const data = await postJson("/api/optional/rewrite-suggestions", {
+    novelText,
+    screenplayDraft,
+  });
+
+  return data.rewriteSuggestions;
+}
