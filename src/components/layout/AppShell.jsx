@@ -15,13 +15,13 @@ const navItems = [
   {
     path: "/",
     label: "官方首页",
-    description: "进入品牌叙事首页",
+    description: "了解产品定位与核心能力",
     icon: Home,
   },
   {
     path: "/workspace",
     label: "工作台",
-    description: "运行多Agent剧本改编",
+    description: "输入小说并生成影视剧本",
     icon: BookOpen,
   },
   {
@@ -40,26 +40,73 @@ const navItems = [
   {
     path: "/comparison",
     label: "原著对照",
-    description: "追踪原文与Scene对应",
+    description: "对照原著内容与改编剧本",
     icon: GitCompare,
   },
   {
     path: "/review",
     label: "导演审查",
-    description: "评估忠实度与人物一致性",
+    description: "评估剧本质量与修改方向",
     icon: ScrollText,
   },
   {
     path: "/schema",
     label: "YAML结构",
-    description: "查看技术结构与导出格式",
+    description: "查看结构化导出格式",
     icon: FileCode2,
-    group: "technical",
+    group: "delivery",
   },
 ];
 
-const primaryNavItems = navItems.filter((item) => item.group !== "technical");
-const technicalNavItems = navItems.filter((item) => item.group === "technical");
+const primaryNavItems = navItems.filter((item) => item.group !== "delivery");
+const deliveryNavItems = navItems.filter((item) => item.group === "delivery");
+
+function DeckLink({ item }) {
+  const { path, label, description, icon: Icon } = item;
+
+  return (
+    <NavLink
+      to={path}
+      end={path === "/"}
+      className={({ isActive }) =>
+        `story-deck-card relative block rounded-xl border border-story-gold/20 bg-story-card/90 px-4 py-3 shadow-[0_16px_46px_rgba(0,0,0,0.24)] transition-all duration-300 ease-out ${
+          isActive
+            ? "story-deck-card-active story-deck-glow border-story-gold/70 bg-story-card text-story-text"
+            : "text-story-muted"
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <span className="relative z-10 flex items-center gap-3">
+          {isActive ? (
+            <span
+              className="absolute -left-4 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full bg-story-gold shadow-[0_0_18px_rgba(201,169,110,0.55)]"
+              aria-hidden="true"
+            />
+          ) : null}
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-story-border bg-story-bg/85 text-story-gold">
+            <Icon size={18} aria-hidden="true" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center justify-between gap-2">
+              <span className="font-serif text-lg font-semibold text-story-text">
+                {label}
+              </span>
+              {isActive ? (
+                <span className="rounded-full border border-story-gold/50 px-2 py-0.5 text-[10px] text-story-gold">
+                  当前模块
+                </span>
+              ) : null}
+            </span>
+            <span className="mt-1 block text-xs leading-5 text-story-muted">
+              {description}
+            </span>
+          </span>
+        </span>
+      )}
+    </NavLink>
+  );
+}
 
 function AppShell({ children }) {
   useEffect(() => {
@@ -93,109 +140,26 @@ function AppShell({ children }) {
               故事卡组
             </span>
             <span className="mt-1 block text-xs leading-5 text-story-muted">
-              选择一张故事牌，进入创作流程
+              选择创作模块，推进你的剧本项目
             </span>
           </span>
         </NavLink>
 
         <nav className="mt-7 space-y-3 text-sm text-story-muted">
-          {primaryNavItems.map(({ path, label, description, icon: Icon }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={path === "/"}
-              className={({ isActive }) =>
-                `story-deck-card relative block rounded-xl border border-story-gold/20 bg-story-card/90 px-4 py-3 shadow-[0_16px_46px_rgba(0,0,0,0.24)] transition-all duration-300 ease-out ${
-                  isActive
-                    ? "story-deck-card-active story-deck-glow border-story-gold/70 bg-story-card text-story-text"
-                    : "text-story-muted"
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <span className="relative z-10 flex items-center gap-3">
-                  {isActive ? (
-                    <span
-                      className="absolute -left-4 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full bg-story-gold shadow-[0_0_18px_rgba(201,169,110,0.55)]"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-story-border bg-story-bg/85 text-story-gold">
-                    <Icon size={18} aria-hidden="true" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center justify-between gap-2">
-                      <span className="font-serif text-lg font-semibold text-story-text">
-                        {label}
-                      </span>
-                      {isActive ? (
-                        <span className="rounded-full border border-story-gold/50 px-2 py-0.5 text-[10px] text-story-gold">
-                          当前模块
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="mt-1 block text-xs leading-5 text-story-muted">
-                      {description}
-                    </span>
-                  </span>
-                </span>
-              )}
-            </NavLink>
+          {primaryNavItems.map((item) => (
+            <DeckLink key={item.path} item={item} />
           ))}
         </nav>
 
         <div className="mt-6 border-t border-story-border pt-4">
           <p className="mb-3 px-1 text-xs uppercase tracking-[0.18em] text-story-muted">
-            技术交付
+            结构化交付
           </p>
           <nav className="space-y-3 text-sm text-story-muted">
-            {technicalNavItems.map(({ path, label, description, icon: Icon }) => (
-              <NavLink
-                key={path}
-                to={path}
-                className={({ isActive }) =>
-                  `story-deck-card relative block rounded-xl border border-story-border bg-story-card/70 px-4 py-3 shadow-[0_12px_36px_rgba(0,0,0,0.18)] transition-all duration-300 ease-out ${
-                    isActive
-                      ? "story-deck-card-active story-deck-glow border-story-gold/70 bg-story-card text-story-text"
-                      : "text-story-muted"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <span className="relative z-10 flex items-center gap-3">
-                    {isActive ? (
-                      <span
-                        className="absolute -left-4 top-1/2 h-10 w-[3px] -translate-y-1/2 rounded-full bg-story-gold shadow-[0_0_18px_rgba(201,169,110,0.55)]"
-                        aria-hidden="true"
-                      />
-                    ) : null}
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-story-border bg-story-bg/85 text-story-gold">
-                      <Icon size={18} aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="font-serif text-lg font-semibold text-story-text">
-                          {label}
-                        </span>
-                        {isActive ? (
-                          <span className="rounded-full border border-story-gold/50 px-2 py-0.5 text-[10px] text-story-gold">
-                            当前模块
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="mt-1 block text-xs leading-5 text-story-muted">
-                        {description}
-                      </span>
-                    </span>
-                  </span>
-                )}
-              </NavLink>
+            {deliveryNavItems.map((item) => (
+              <DeckLink key={item.path} item={item} />
             ))}
           </nav>
-        </div>
-
-        <div className="mt-auto rounded-xl border border-story-border bg-story-card/70 p-3 text-xs leading-5 text-story-muted">
-          演示模式用于展示小说改编到剧本交付的完整流程。下一阶段将接入真实大模型。
         </div>
       </aside>
 

@@ -1,20 +1,49 @@
 import { Link } from "react-router-dom";
 import { useStory } from "../context/StoryContext.jsx";
 import { normalizeEmotionalArc } from "../utils/emotionalArc.js";
+import { formatSceneNumber } from "../utils/screenplayFormatter.js";
+
+const beatLabels = {
+  quiet_routine: "平静日常",
+  private_shock: "发现异常",
+  external_threat: "危机升级",
+  mission_acceptance: "接受使命",
+};
+
+function translateBeat(value, index) {
+  const text = String(value || "").trim();
+  return beatLabels[text] || text || `剧情阶段${index + 1}`;
+}
 
 function renderEmotionalArc(analysisResult, screenplayDraft) {
   return normalizeEmotionalArc(
     analysisResult?.emotional_arc || screenplayDraft?.emotional_arc || [],
     "review.emotionalArc",
-  );
+  ).map(translateBeat);
+}
+
+function normalizeSceneLabel(value, fallbackIndex = 0) {
+  const text = String(value || "").trim();
+  const match = text.match(/SC-?0*(\d+)/i);
+
+  if (match) {
+    return formatSceneNumber(Number(match[1]), fallbackIndex + 1);
+  }
+
+  if (/^\d+$/.test(text)) {
+    return formatSceneNumber(Number(text), fallbackIndex + 1);
+  }
+
+  return text || formatSceneNumber(fallbackIndex + 1);
 }
 
 function EmotionCurve({ emotionalArc }) {
   const safeArc = Array.isArray(emotionalArc) ? emotionalArc : [];
   const fallbackPoints = [28, 52, 76, 92];
-  const points = (safeArc.length ? safeArc : ["起始", "推进", "冲突", "落点"]).map(
+  const points = (safeArc.length ? safeArc : ["平静日常", "发现异常", "危机升级", "接受使命"]).map(
     (beat, index) => ({
-      label: String(beat).slice(0, 8),
+      label: `剧情阶段${index + 1}：${translateBeat(beat, index)}`,
+      shortLabel: translateBeat(beat, index),
       value: fallbackPoints[index] || 92,
     }),
   );
@@ -51,10 +80,10 @@ function EmotionCurve({ emotionalArc }) {
             const y = 110 - point.value;
 
             return (
-              <g key={`${point.label}-${index}`}>
+              <g key={`${point.shortLabel}-${index}`}>
                 <circle cx={x} cy={y} r="5" fill="#c9a96e" />
                 <text x={x} y="132" fill="#8a7a6a" fontSize="10" textAnchor="middle">
-                  {point.label}
+                  {point.shortLabel}
                 </text>
               </g>
             );
@@ -62,21 +91,15 @@ function EmotionCurve({ emotionalArc }) {
         </svg>
       </div>
       <ol className="mt-4 grid gap-3 md:grid-cols-4">
-        {safeArc.length ? (
-          safeArc.map((beat, index) => (
-            <li
-              key={`${beat}-${index}`}
-              className="rounded-md border border-story-border bg-story-bg/70 px-3 py-3 text-sm leading-6 text-story-muted"
-            >
-              <span className="block text-story-gold">节拍 {index + 1}</span>
-              {beat}
-            </li>
-          ))
-        ) : (
-          <li className="rounded-md border border-story-border bg-story-bg/70 px-3 py-3 text-sm text-story-muted md:col-span-4">
-            暂无情绪轨迹数据
+        {points.map((point, index) => (
+          <li
+            key={`${point.label}-${index}`}
+            className="rounded-md border border-story-border bg-story-bg/70 px-3 py-3 text-sm leading-6 text-story-muted"
+          >
+            <span className="block text-story-gold">剧情阶段{index + 1}</span>
+            {point.shortLabel}
           </li>
-        )}
+        ))}
       </ol>
     </article>
   );
@@ -120,7 +143,7 @@ function normalizeIssue(issue, index) {
 function ReviewReport() {
   const { state } = useStory();
   const reviewResult = state.reviewResult || null;
-  const scenes = state.scenes || [];
+  const scenes = state.scenes || state.screenplayDraft?.scenes || [];
   const analysisResult = state.analysisResult || null;
   const adaptationPlan = state.adaptationPlan || null;
   const generatedYaml = state.generatedYaml || "";
@@ -132,7 +155,7 @@ function ReviewReport() {
         <p className="text-sm uppercase tracking-wide text-story-muted">AI 导演审查官</p>
         <h1 className="mt-3 font-serif text-3xl font-semibold">导演审查报告</h1>
         <p className="mt-4 max-w-2xl text-story-muted">
-          暂无导演审查结果，请先运行 AI 改编流程。
+          暂无导演审查结果，请先在工作台生成剧本后，再选择生成导演审查。
         </p>
         <Link
           to="/workspace"
@@ -148,7 +171,15 @@ function ReviewReport() {
   const issues = (reviewResult?.issues || reviewResult?.riskFlags || []).map(normalizeIssue);
   const suggestions = reviewResult?.suggestions || reviewResult?.revisionSuggestions || [];
   const emotionalArc = renderEmotionalArc(analysisResult, screenplayDraft);
-  const criteria = reviewResult?.reviewCriteria || [];
+  const criteria = reviewResult?.reviewCriteria || [
+    "原著忠实度：核心事件、人物关系、主题是否保留。",
+    "戏剧冲突：每场是否有目标、阻碍、反转。",
+    "人物一致性：角色动机、语言、行为是否稳定。",
+    "镜头可拍性：场景是否能被实际拍摄，动作是否清楚。",
+    "节奏控制：信息释放、悬念、情绪峰值是否合理。",
+    "情感传达：人物关系是否打动观众。",
+    "商业短剧潜力：开头钩子、结尾钩子、爽点或悬念是否成立。",
+  ];
   const sceneReviews = reviewResult?.sceneReviews || [];
 
   return (
@@ -167,28 +198,22 @@ function ReviewReport() {
       <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-story-gold">Review Criteria</p>
-            <h2 className="mt-1 font-serif text-2xl font-semibold">专业审查标准</h2>
+            <p className="text-sm text-story-gold">审查标准</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold">专业剧本评估维度</h2>
           </div>
           <span className="rounded-full border border-story-border px-3 py-1 text-xs text-story-muted">
             导演 / 编剧 / 制片视角
           </span>
         </div>
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {criteria.length ? (
-            criteria.map((criterion, index) => (
-              <p
-                key={`${criterion}-${index}`}
-                className="rounded-lg border border-story-border bg-story-bg/75 px-4 py-3 text-sm leading-7 text-story-muted"
-              >
-                {criterion}
-              </p>
-            ))
-          ) : (
-            <p className="rounded-lg border border-story-border bg-story-bg/75 px-4 py-3 text-sm text-story-muted xl:col-span-3">
-              暂无审查标准明细
+          {criteria.map((criterion, index) => (
+            <p
+              key={`${criterion}-${index}`}
+              className="rounded-lg border border-story-border bg-story-bg/75 px-4 py-3 text-sm leading-7 text-story-muted"
+            >
+              {criterion}
             </p>
-          )}
+          ))}
         </div>
       </section>
 
@@ -258,7 +283,7 @@ function ReviewReport() {
         </article>
 
         <article className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
-          <h2 className="font-serif text-xl font-semibold">本章信号</h2>
+          <h2 className="font-serif text-xl font-semibold">本章信息</h2>
           <dl className="mt-4 space-y-4 text-sm">
             <div>
               <dt className="text-story-muted">本章主题</dt>
@@ -315,7 +340,9 @@ function ReviewReport() {
                   key={`${review?.sceneId || "scene-review"}-${index}`}
                   className="rounded-md border border-story-border px-4 py-3 text-sm leading-6 text-story-muted"
                 >
-                  <span className="mr-2 text-story-gold">{review?.sceneId || "未标注场次"}</span>
+                  <span className="mr-2 text-story-gold">
+                    {normalizeSceneLabel(review?.sceneId || review?.scene_id, index)}
+                  </span>
                   {review?.note || "暂无场次说明"}
                 </li>
               ))

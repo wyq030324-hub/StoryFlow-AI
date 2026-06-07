@@ -18,148 +18,122 @@ const rewriteStyles = [
 
 const rewriteMocks = {
   恐怖惊悚: {
-    position: "封闭空间中的记忆异变恐怖片。",
+    title: "潮汐归档人 - 恐怖惊悚版",
+    positioning: "封闭空间中的记忆异变恐怖短剧。",
     conflict: "林照必须确认父亲留下的录音是否真实，同时判断档案馆本身是否正在模仿人类记忆。",
-    characterShift: "林照从理性档案员变成被空间不断试探的幸存者，门外来客不露脸，只通过敲门节奏制造压迫。",
-    sceneShift: "档案馆灯光逐层熄灭，卷宗柜像潮水一样缓慢移动，照片中的父亲会在每次回看时靠近镜头。",
-    pacing: "前半段极慢铺压迫，后半段用连续声音异常和空间错位加速。",
-    directorNote: "镜头贴近手、照片和录音机，不急着展示怪物，让恐惧来自无法确认的细节。",
-    openingAction: "林照听见柜门内侧传来自己的呼吸声。她停下，柜门却从里面被轻轻敲了三下。",
-    turnAction: "录音机没有播放父亲的声音，而是播放出林照刚才说过的话。",
+    sceneDescription: "档案馆灯光逐层熄灭，卷宗柜像潮水一样缓慢移动，照片中的父亲在每次回看时更靠近镜头。",
+    firstAction: "林照听见柜门内侧传来自己的呼吸声。她停下，柜门却从里面被轻轻敲了三下。",
+    secondAction: "录音机没有播放父亲的声音，而是播放出林照刚刚说过的话。",
     line: "不要回答它。",
   },
   悬疑推理: {
-    position: "以证据链为核心的城市旧案推理剧。",
+    title: "潮汐归档人 - 悬疑推理版",
+    positioning: "以证据链为核心的城市旧案推理剧。",
     conflict: "林照需要把照片编号、月牙伤痕和沉船档案缺页连成一条可验证的线索链。",
-    characterShift: "林照更像调查者，父亲从失踪亲人变成关键证人，门外来客承担线索投递者与干扰者双重身份。",
-    sceneShift: "每场戏都露出一个新证据，同时推翻上一个判断。",
-    pacing: "三段式递进：发现异常、验证证据、反向锁定真正被删除的人。",
-    directorNote: "照片、印章、录音机都必须承担推理功能，不能只做氛围。",
-    openingAction: "林照把照片背面的编号抄到纸上，翻开失窃登记簿，空白页边缘留下同样的压痕。",
-    turnAction: "她将编号倒过来读，发现那不是档案号，而是一串船舱座位号。",
+    sceneDescription: "桌面摊开旧照片、登记簿和录音磁带，每一件物证都指向一个被擦掉的名字。",
+    firstAction: "林照把照片背面的编号抄到纸上，翻开失踪登记簿，空白页边缘留下同样的压痕。",
+    secondAction: "她将编号倒过来读，发现那不是档案号，而是一串船舱座位号。",
     line: "不是船失踪，是记录被人偷走了。",
   },
   心理惊悚: {
-    position: "关于记忆不可靠的心理惊悚剧。",
+    title: "潮汐归档人 - 心理惊悚版",
+    positioning: "关于记忆不可靠的心理惊悚剧。",
     conflict: "林照无法判断父亲是否真的留下线索，还是自己在长期夜班中制造了替代记忆。",
-    characterShift: "林照的每次判断都被自己的记忆反咬，观众跟随她一起失去确定性。",
-    sceneShift: "同一段走廊反复出现，细节每次略有不同。",
-    pacing: "用重复、停顿和微小差异累积不安，最后再给出外部威胁证据。",
-    directorNote: "用声画错位表现心理压力，不要过早解释真相。",
-    openingAction: "林照第三次走过同一扇窗。窗玻璃上映着她的背影，却比她慢半拍转身。",
-    turnAction: "照片中的父亲抬起头，嘴型和林照此刻的呼吸完全同步。",
+    sceneDescription: "同一段走廊反复出现，灯光、钟声和窗户倒影每一次都略有不同。",
+    firstAction: "林照第三次走过同一扇窗。窗玻璃上映着她的背影，却比她慢半拍转身。",
+    secondAction: "照片中的父亲抬起头，嘴型和林照此刻的呼吸完全同步。",
     line: "我刚才已经来过这里。",
   },
   黑色幽默: {
-    position: "冷峻官僚系统下的荒诞悬疑短剧。",
+    title: "潮汐归档人 - 黑色幽默版",
+    positioning: "冷峻官僚系统下的荒诞悬疑短剧。",
     conflict: "城市记忆被删除，却需要林照提交三份纸质申请才能证明删除发生过。",
-    characterShift: "林照更锋利、更讽刺，门外来客像系统派来的低级执行员。",
-    sceneShift: "恐怖被行政术语遮蔽，越严肃越荒诞。",
-    pacing: "冷对白和突发危险交替，形成笑意背后的失控感。",
-    directorNote: "所有角色都一本正经，荒诞来自制度语言与真实危险的冲突。",
-    openingAction: "打印机自动吐出一张表格，标题是《本人不存在情况说明》。",
-    turnAction: "林照签完字，系统广播立刻宣布她的父亲从未出生。",
+    sceneDescription: "恐惧被行政术语遮蔽，越严肃越荒诞。",
+    firstAction: "打印机自动吐出一张表格，标题是《本人不存在情况说明》。",
+    secondAction: "林照签完字，系统广播立刻宣布她的父亲从未出生。",
     line: "如需找回亲属，请先确认亲属曾经存在。",
   },
   青春爱情: {
-    position: "悬疑外壳下的双人追查与情感修复。",
+    title: "潮汐归档人 - 青春爱情版",
+    positioning: "悬疑外壳下的双人追查与情感修复。",
     conflict: "林照与旧友周屿共同追查沉船案，却发现两人的家庭都被同一段城市记忆改写。",
-    characterShift: "林照不再独自承压，周屿提供行动支点，也带来情感选择。",
-    sceneShift: "档案馆、雨夜街口和码头成为两人关系推进的节点。",
-    pacing: "悬疑信息与情感靠近交替推进，结尾以共同选择进入危险为钩子。",
-    directorNote: "爱情线必须参与破案，不能只做陪伴。",
-    openingAction: "周屿把伞偏向林照，自己半边肩膀被雨打湿。他递出一张同样泛黄的船票。",
-    turnAction: "船票背面写着两位母亲的名字，时间正好是沉船当夜。",
+    sceneDescription: "档案馆、雨夜街口和码头成为两人关系推进的节点。",
+    firstAction: "周屿把伞偏向林照，自己半边肩膀被雨打湿。他递出一张同样泛黄的船票。",
+    secondAction: "船票背面写着两位母亲的名字，时间正好是沉船当夜。",
     line: "我母亲，也在那天晚上消失了。",
   },
   诗意抒情: {
-    position: "以海雾、纸页和灯塔组织情绪的诗性悬疑。",
+    title: "潮汐归档人 - 诗意抒情版",
+    positioning: "以海雾、纸页和灯塔组织情绪的诗性悬疑。",
     conflict: "林照寻找的不是单一真相，而是一座城市拒绝遗忘的方式。",
-    characterShift: "林照更内敛，行动像是在替城市整理遗书。",
-    sceneShift: "动作减少，画面与旁白承担更多情绪重量。",
-    pacing: "缓慢、留白、层层回望，高潮不靠爆点，而靠认知沉降。",
-    directorNote: "把潮水、纸张和灯塔作为反复出现的情绪押韵。",
-    openingAction: "纸页在风里轻轻翻动，像一群还不肯离开的白鸟。",
-    turnAction: "林照把照片按在胸口，听见远处灯塔转身。",
+    sceneDescription: "动作减少，画面与旁白承担更多情绪重量。",
+    firstAction: "纸页在风里轻轻翻动，像一群还不肯离开的白鸟。",
+    secondAction: "林照把照片按在胸口，听见远处灯塔转身。",
     line: "如果城市会做梦，它梦见的一定是海。",
   },
   克苏鲁风格: {
-    position: "城市记忆与不可名状海底存在相连的宇宙恐怖。",
+    title: "潮汐归档人 - 克苏鲁风格版",
+    positioning: "城市记忆与不可名状海底存在相连的宇宙恐怖。",
     conflict: "沉船案不是失踪事故，而是城市试图抵抗某种海底意识的失败记录。",
-    characterShift: "林照从调查者变成被选中的聆听者，父亲可能早已成为那段低语的一部分。",
-    sceneShift: "海雾、录音噪声和档案编号逐渐组成无法直视的图案。",
-    pacing: "先从具体线索入手，逐步扩大到人类无法理解的尺度。",
-    directorNote: "不可名状不等于堆怪物，要用声音、角度和缺失信息表现认知崩塌。",
-    openingAction: "灯塔光束扫过海雾，雾里浮现的不是船影，而是一只缓慢睁开的巨大眼睛。",
-    turnAction: "卷宗里的字开始向纸页深处沉下去，像被海底什么东西吞咽。",
+    sceneDescription: "海图、录音噪声和档案编号逐渐组成无法直视的图案。",
+    firstAction: "灯塔光束扫过海图，雾里浮现的不是船影，而是一只缓慢睁开的巨大眼睛。",
+    secondAction: "卷宗里的字开始向纸页深处沉下去，像被海底什么东西吞咽。",
     line: "不要记住它的形状。",
   },
   赛博朋克: {
-    position: "纸质档案与城市数据污染并存的近未来悬疑。",
+    title: "潮汐归档人 - 赛博朋克版",
+    positioning: "纸质档案与城市数据污染并存的近未来悬疑。",
     conflict: "旧城档案馆是城市记忆备份节点，而沉船案被某个系统持续覆盖。",
-    characterShift: "林照具备数据修复能力，父亲是早期记忆备份工程师。",
-    sceneShift: "霉味纸页与低饱和金色界面叠加，旧档案在空气中投影出破损数据。",
-    pacing: "信息密度更高，场景切换更快，结尾抛出系统级追杀。",
-    directorNote: "避免蓝紫霓虹，保持暗金旧城质感，让科技像从纸张里渗出来。",
-    openingAction: "林照接入磁带接口，纸质卷宗上的字开始同步改写。",
-    turnAction: "每个被删除的名字都短暂亮成金色，然后被系统黑块覆盖。",
+    sceneDescription: "霉味纸页与低饱和金色界面叠加，旧档案在空气中投影出破损数据。",
+    firstAction: "林照接入磁带接口，纸质卷宗上的字开始同步改写。",
+    secondAction: "每个被删除的名字都短暂亮成金色，然后被系统黑块覆盖。",
     line: "用户林照，记忆权限不足。",
   },
   宫崎骏治愈系: {
-    position: "温柔奇幻气质的城市记忆守护故事。",
+    title: "潮汐归档人 - 治愈奇幻版",
+    positioning: "温柔奇幻气质的城市记忆守护故事。",
     conflict: "林照需要帮助一座正在遗忘自己的城市找回名字。",
-    characterShift: "林照更柔软，门外来客可改为沉默的引路者，父亲留下的是守护而非阴谋。",
-    sceneShift: "卷宗夹层飞出金色纸鱼，灯塔像会呼吸的老朋友。",
-    pacing: "恐惧下降，奇遇上升，用温柔推动使命感。",
-    directorNote: "治愈不等于低幼，核心仍然是告别与守护。",
-    openingAction: "卷宗夹层飞出一尾小小的金色纸鱼，它绕着林照的手背游了一圈。",
-    turnAction: "纸鱼停在月牙伤痕上，吐出一枚湿漉漉的旧船票。",
+    sceneDescription: "卷宗夹层飞出金色纸鱼，灯塔像会呼吸的老朋友。",
+    firstAction: "卷宗夹层飞出一尾小小的金色纸鱼，它绕着林照的手背游了一圈。",
+    secondAction: "纸鱼停在月牙伤痕上，吐出一枚湿漉漉的旧船票。",
     line: "你也记得他，对吗？",
   },
   诺兰烧脑风: {
-    position: "时间线错位与记忆回写机制驱动的高概念悬疑。",
+    title: "潮汐归档人 - 时间谜题版",
+    positioning: "时间线错位与记忆回写机制驱动的高概念悬疑。",
     conflict: "林照每阅读一次档案，现实时间线就被改写一次，父亲可能来自下一轮循环。",
-    characterShift: "林照必须学会利用错位记忆自救，父亲既是过去的线索，也是未来的警告。",
-    sceneShift: "同一事件从不同时间方向重复，照片细节随主角选择改变。",
-    pacing: "多线并进、信息回扣，结尾用一个反向证据重构前文。",
-    directorNote: "复杂结构必须有清晰情感锚点，父女关系是观众理解时间谜题的入口。",
-    openingAction: "林照翻到下一页，上一分钟才写下的备注已经变成父亲的笔迹。",
-    turnAction: "钟表倒走三格，门外敲门声先于敲门动作出现。",
-    line: "这不是旧档案，这是未来寄回来的证词。",
+    sceneDescription: "同一事件从不同时间方向重复，照片细节随主角选择改变。",
+    firstAction: "林照翻到下一页，上一分钟前才写下的备注已经变成父亲的笔迹。",
+    secondAction: "钟表倒走三格，门外敲门声先于敲门动作出现。",
+    line: "这不是旧档案，这是未来寄回来的证据。",
   },
 };
 
 function buildRewriteScript(styleName, result, directorPrompt) {
   return {
-    title: `潮汐归档人 · ${styleName}版`,
-    note: directorPrompt || "保留原著核心事件，强化导演风格表达。",
+    title: result.title,
+    note: directorPrompt || `选择“${styleName}”方向后，保留原作核心事件，并强化对应风格的戏剧表达。`,
     scenes: [
       {
-        scene_number: 1,
-        int_ext: "内景",
-        location: "临港旧城档案馆",
-        time: "午夜",
-        scene_description: result.sceneShift,
+        sceneNumber: 1,
+        heading: "内景 / 临港旧城档案馆 / 午夜",
+        sceneDescription: result.sceneDescription,
         characters: ["林照"],
-        dramatic_purpose: result.conflict,
-        action_lines: [result.openingAction, result.turnAction],
+        actionLines: [result.firstAction, result.secondAction],
         dialogues: [
           {
             character: "林照",
             line: result.line,
           },
         ],
-        transition: "灯光压低，切入下一场。",
+        transition: "灯光压低，切至下一场。",
       },
       {
-        scene_number: 2,
-        int_ext: "内景 / 外景",
-        location: "档案馆窗边 / 旧城街面",
-        time: "深夜",
-        scene_description: result.position,
+        sceneNumber: 2,
+        heading: "内景 / 档案馆楼梯间 / 深夜",
+        sceneDescription: result.positioning,
         characters: ["林照", "门外来客"],
-        dramatic_purpose: "用新风格重新组织追查动机，并给下一集留下清晰钩子。",
-        action_lines: [
+        actionLines: [
           "林照把照片塞进口袋，第一次没有退后。",
           "门外来客的影子停在楼梯口，像在等待她主动走近。",
         ],
@@ -185,54 +159,39 @@ function ScriptWindow({ script }) {
       <div className="border-b border-story-border bg-story-card/80 px-4 py-4">
         <h4 className="font-serif text-2xl font-semibold">《{script.title}》</h4>
         <p className="mt-2 text-sm leading-6 text-story-muted">
-          导演提示：{script.note}
+          创作提示：{script.note}
         </p>
       </div>
       <div className="space-y-5 p-4">
         {script.scenes.map((scene) => (
           <article
-            key={scene.scene_number}
+            key={scene.sceneNumber}
             className="rounded-lg border border-story-border bg-story-card/70 p-4 text-sm leading-7"
           >
             <h5 className="font-serif text-xl text-story-text">
-              第 {scene.scene_number} 场{"  "}
-              {scene.int_ext} / {scene.location} / {scene.time}
+              第{scene.sceneNumber}场
             </h5>
-            <p className="mt-3 text-story-muted">
-              <span className="text-story-gold">场景说明：</span>
-              {scene.scene_description}
-            </p>
+            <p className="mt-2 text-story-gold">{scene.heading}</p>
+            <p className="mt-3 text-story-muted">{scene.sceneDescription}</p>
             <p className="mt-2 text-story-muted">
-              <span className="text-story-gold">人物：</span>
-              {scene.characters.join("、")}
+              人物：{scene.characters.join("、")}
             </p>
-            <p className="mt-2 text-story-muted">
-              <span className="text-story-gold">戏剧目的：</span>
-              {scene.dramatic_purpose}
-            </p>
-            <div className="mt-4">
-              <p className="text-story-gold">动作：</p>
-              <div className="mt-2 space-y-2 text-story-text">
-                {scene.action_lines.map((line) => (
-                  <p key={line}>{line}</p>
-                ))}
-              </div>
+            <div className="mt-4 space-y-2 text-story-text">
+              {scene.actionLines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
             </div>
-            <div className="mt-4">
-              <p className="text-story-gold">对白：</p>
-              <div className="mt-2 space-y-4 text-story-text">
-                {scene.dialogues.map((dialogue) => (
-                  <div key={`${dialogue.character}-${dialogue.line}`} className="pl-4">
-                    <p className="font-serif text-lg text-story-gold">
-                      {dialogue.character}
-                    </p>
-                    <p>{dialogue.line}</p>
-                  </div>
-                ))}
-              </div>
+            <div className="mt-4 space-y-4 text-story-text">
+              {scene.dialogues.map((dialogue) => (
+                <div key={`${dialogue.character}-${dialogue.line}`} className="pl-4">
+                  <p className="font-serif text-lg text-story-gold">
+                    {dialogue.character}
+                  </p>
+                  <p>{dialogue.line}</p>
+                </div>
+              ))}
             </div>
             <p className="mt-4 rounded-md border border-story-border bg-story-bg/70 px-3 py-2 text-story-muted">
-              <span className="text-story-gold">转场：</span>
               {scene.transition}
             </p>
           </article>
@@ -278,7 +237,7 @@ function Rewrite() {
       }
 
       if (current.length >= 3) {
-        setMessage("最多选择三种风格");
+        setMessage("最多选择三种风格，请先取消一个。");
         return current;
       }
 
@@ -310,7 +269,7 @@ function Rewrite() {
               创意重构引擎
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-story-muted">
-              输入原文，选择最多三种导演风格，生成不同版本的完整新剧本。当前阶段使用本地 Mock，不调用真实 AI。
+              选择不同风格，生成不同版本剧本。适合探索恐怖、悬疑、爱情、治愈等多种导演表达方向。
             </p>
           </div>
           <Link
@@ -440,25 +399,13 @@ function Rewrite() {
                   <dl className="mt-4 grid gap-3 text-sm leading-7 md:grid-cols-2">
                     <div>
                       <dt className="text-story-muted">新风格定位</dt>
-                      <dd className="text-story-text">{result.position}</dd>
+                      <dd className="text-story-text">{result.positioning}</dd>
                     </div>
                     <div>
                       <dt className="text-story-muted">新核心冲突</dt>
                       <dd className="text-story-text">{result.conflict}</dd>
                     </div>
-                    <div>
-                      <dt className="text-story-muted">人物变化</dt>
-                      <dd className="text-story-text">{result.characterShift}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-story-muted">叙事节奏</dt>
-                      <dd className="text-story-text">{result.pacing}</dd>
-                    </div>
                   </dl>
-                  <div className="mt-4 rounded-md border-l-4 border-story-gold bg-story-card/80 px-4 py-3 text-sm leading-7 text-story-muted">
-                    <span className="text-story-gold">导演建议：</span>
-                    {result.directorNote}
-                  </div>
                   <ScriptWindow script={script} />
                 </article>
               ))}

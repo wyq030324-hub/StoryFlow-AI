@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowRight, Bot, Film, Wand2 } from "lucide-react";
+import { ArrowDown, ArrowRight, Film, ScrollText, Wand2 } from "lucide-react";
 import { useRef } from "react";
 import { Link } from "react-router-dom";
 import useRevealGroup from "../hooks/useRevealGroup.js";
@@ -7,17 +7,17 @@ import useRevealOnScroll from "../hooks/useRevealOnScroll.js";
 const capabilityCards = [
   {
     title: "小说转剧本",
-    description: "多 Agent 协作，将原著拆解为专业场景剧本。",
+    description: "将原著内容拆解为人物、场景、动作与对白，形成可继续打磨的剧本初稿。",
     icon: Film,
   },
   {
-    title: "多 Agent 审查",
-    description: "导演视角评估忠实度、节奏与人物一致性。",
-    icon: Bot,
+    title: "导演审查",
+    description: "从忠实度、节奏、冲突和人物一致性等维度评估改编质量。",
+    icon: ScrollText,
   },
   {
     title: "创意重构",
-    description: "重塑故事风格，提供多维度导演创作方向。",
+    description: "选择不同导演风格，生成不同版本剧本，帮助团队探索更多表达方向。",
     icon: Wand2,
   },
 ];
@@ -59,7 +59,7 @@ function Home() {
             让小说以导演的语言重生
           </p>
           <p className="reveal-child mx-auto mt-5 max-w-2xl text-sm leading-7 text-story-muted sm:text-base sm:leading-8">
-            一个面向编剧、导演与内容创作者的 AI 剧本工作台，将小说转化为可拍摄、可审查、可再创造的专业剧本。
+            面向编剧、短剧创作者与内容团队，将小说、故事梗概或剧情片段转化为可拍摄、可审查、可继续打磨的专业剧本。
           </p>
           <div className="reveal-child mt-9 flex flex-col justify-center gap-3 sm:flex-row">
             <Link
@@ -88,7 +88,7 @@ function Home() {
             把创作流程收束成清晰的专业工作台
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-story-muted">
-            不堆叠功能噪音，只围绕“理解原著、生成剧本、审查改编、再创造”组织核心能力。
+            围绕“理解原著、生成剧本、审查改编、再创作”组织核心能力，让创作者更快获得可用初稿。
           </p>
         </div>
 
