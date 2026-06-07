@@ -8,22 +8,11 @@ const BANNED_PREFIXES = [
   "审查结果：",
 ];
 
-const chineseNumbers = [
-  "",
-  "一",
-  "二",
-  "三",
-  "四",
-  "五",
-  "六",
-  "七",
-  "八",
-  "九",
-  "十",
-];
-
+const chineseNumbers = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"];
 const dialoguePunctuationPattern = /[。！？…!?]$/;
 const dialogueQuotePattern = /^["“].*["”]$/s;
+const characterCuePattern = /^[\u4e00-\u9fa5A-Za-z0-9·]{1,12}$/;
+const transitionPattern = /^(CUT TO:|FADE OUT\.|FADE IN:|MATCH CUT TO:|DISSOLVE TO:)$/i;
 
 export function formatSceneNumber(value, fallback = 1) {
   const number = Number(value || fallback);
@@ -48,15 +37,35 @@ export function formatParagraphNumber(value) {
 function normalizeSceneType(value = "") {
   const text = String(value || "").trim().toUpperCase();
 
-  if (["外景", "EXT", "EXT."].includes(text)) {
-    return "外景";
+  if (["外景", "EXT", "EXT."].includes(text) || text.includes("外")) {
+    return "EXT.";
   }
 
-  if (text.includes("外") && text.includes("内")) {
-    return "内景 / 外景";
+  return "INT.";
+}
+
+function normalizeTime(value = "") {
+  const text = String(value || "").trim().toUpperCase();
+
+  if (!text) {
+    return "DAY";
   }
 
-  return "内景";
+  const timeMap = {
+    日: "DAY",
+    白天: "DAY",
+    日间: "DAY",
+    夜: "NIGHT",
+    夜晚: "NIGHT",
+    午夜: "NIGHT",
+    深夜: "NIGHT",
+    傍晚: "DUSK",
+    黄昏: "DUSK",
+    清晨: "DAWN",
+    黎明: "DAWN",
+  };
+
+  return timeMap[text] || text;
 }
 
 function sanitizeScriptLine(value = "") {
@@ -73,21 +82,59 @@ function sanitizeScriptLine(value = "") {
   return text;
 }
 
-function sanitizeScriptText(value = "") {
-  return String(value || "")
-    .split(/\r?\n/)
-    .map(sanitizeScriptLine)
-    .filter(Boolean)
-    .join("\n");
+function normalizeSceneHeadingFromText(line = "") {
+  const text = sanitizeScriptLine(line);
+
+  if (!text) {
+    return "";
+  }
+
+  const specMatch = text.match(/^(INT\.|EXT\.)\s+(.+?)\s+-\s+(.+)$/i);
+  if (specMatch) {
+    return `${specMatch[1].toUpperCase()} ${specMatch[2].trim()} - ${normalizeTime(specMatch[3])}`;
+  }
+
+  const chineseSceneMatch = text.match(/^第?\s*([一二三四五六七八九十\d]+)\s*场\s*(.*)$/);
+  if (chineseSceneMatch) {
+    const rest = chineseSceneMatch[2].trim();
+    if (!rest) {
+      return "";
+    }
+
+    return normalizeLocationTimeHeading(rest);
+  }
+
+  return normalizeLocationTimeHeading(text);
+}
+
+function normalizeLocationTimeHeading(text = "") {
+  const parts = String(text || "")
+    .split(/[\/|｜-]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  if (parts.length >= 3) {
+    const sceneType = normalizeSceneType(parts.find((part) => /内景|外景|INT\.?|EXT\.?/i.test(part)));
+    const location = parts.find((part) => !/内景|外景|INT\.?|EXT\.?|夜晚|午夜|深夜|白天|日间|清晨|黎明|黄昏|傍晚|DAY|NIGHT|DUSK|DAWN/i.test(part)) || parts[0];
+    const time = parts.find((part) => /夜晚|午夜|深夜|夜|白天|日间|日|清晨|黎明|黄昏|傍晚|DAY|NIGHT|DUSK|DAWN/i.test(part)) || parts[parts.length - 1];
+    return `${sceneType} ${location} - ${normalizeTime(time)}`;
+  }
+
+  const compactMatch = String(text || "").match(/^(内景|外景|INT\.|EXT\.)\s+(.+?)\s+([^\s]+)$/i);
+  if (compactMatch) {
+    return `${normalizeSceneType(compactMatch[1])} ${compactMatch[2].trim()} - ${normalizeTime(compactMatch[3])}`;
+  }
+
+  return "";
 }
 
 function getSceneHeading(scene) {
   const heading = scene?.heading || {};
   const sceneType = normalizeSceneType(scene?.scene_type || scene?.int_ext || heading.int_ext);
   const location = scene?.location || heading.location || "未标注地点";
-  const time = scene?.time || scene?.timeOfDay || heading.time || "未标注时间";
+  const time = normalizeTime(scene?.time || scene?.timeOfDay || heading.time || "DAY");
 
-  return `${sceneType} ${location} ${time}`;
+  return `${sceneType} ${location} - ${time}`;
 }
 
 function getActionLines(scene) {
@@ -112,6 +159,10 @@ function normalizeParenthetical(value = "") {
   }
 
   return `（${text.replace(/^[（(]+|[）)]+$/g, "")}）`;
+}
+
+function isParentheticalLine(line = "") {
+  return /^（.*）$/.test(String(line || "").trim());
 }
 
 function normalizeDialogueLine(value = "") {
@@ -162,7 +213,105 @@ function normalizeTransition(transition = "") {
     return "CUT TO:";
   }
 
-  return text.endsWith(":") || text.endsWith("：") ? text : `${text}:`;
+  if (transitionPattern.test(text)) {
+    return text.toUpperCase();
+  }
+
+  return text.endsWith(":") || text.endsWith(".") ? text : `${text}:`;
+}
+
+function isSceneHeading(line = "") {
+  return /^(INT\.|EXT\.)\s+/i.test(line) || /^第?\s*[一二三四五六七八九十\d]+\s*场/.test(line);
+}
+
+function isCharacterCue(line = "") {
+  return characterCuePattern.test(line) && !isSceneHeading(line) && !transitionPattern.test(line);
+}
+
+function normalizeColonDialogue(line = "") {
+  const match = sanitizeScriptLine(line).match(/^([\u4e00-\u9fa5A-Za-z0-9·]{1,12})\s*[:：]\s*(.+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return [match[1].trim(), normalizeDialogueLine(match[2])];
+}
+
+function normalizeScriptText(value = "") {
+  const rawLines = String(value || "").split(/\r?\n/);
+  const output = [];
+
+  rawLines.forEach((rawLine, index) => {
+    const line = sanitizeScriptLine(rawLine);
+
+    if (!line) {
+      if (output[output.length - 1] !== "") {
+        output.push("");
+      }
+      return;
+    }
+
+    const colonDialogue = normalizeColonDialogue(line);
+    if (colonDialogue) {
+      output.push(...colonDialogue, "");
+      return;
+    }
+
+    if (isSceneHeading(line)) {
+      const heading = normalizeSceneHeadingFromText(line);
+      if (heading) {
+        output.push(heading, "");
+      }
+      return;
+    }
+
+    if (transitionPattern.test(line)) {
+      output.push(normalizeTransition(line), "");
+      return;
+    }
+
+    if (isParentheticalLine(line)) {
+      output.push(normalizeParenthetical(line));
+      return;
+    }
+
+    const nonEmptyOutput = output.filter(Boolean);
+    const previous = nonEmptyOutput[nonEmptyOutput.length - 1] || "";
+    const beforePrevious = nonEmptyOutput[nonEmptyOutput.length - 2] || "";
+    const followsCharacterCue =
+      isCharacterCue(previous) ||
+      (isParentheticalLine(previous) && isCharacterCue(beforePrevious));
+
+    if (
+      followsCharacterCue &&
+      !dialogueQuotePattern.test(line) &&
+      !isSceneHeading(line) &&
+      !transitionPattern.test(line)
+    ) {
+      output.push(normalizeDialogueLine(line), "");
+      return;
+    }
+
+    if (dialogueQuotePattern.test(line)) {
+      output.push(normalizeDialogueLine(line), "");
+      return;
+    }
+
+    if (
+      isCharacterCue(line) &&
+      rawLines[index + 1] &&
+      !isSceneHeading(rawLines[index + 1]) &&
+      !normalizeColonDialogue(rawLines[index + 1])
+    ) {
+      output.push(line);
+      return;
+    }
+
+    output.push(line, "");
+  });
+
+  return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 export function formatSceneHeading(scene) {
@@ -170,13 +319,16 @@ export function formatSceneHeading(scene) {
 }
 
 export function splitScreenplayIntoSections(screenplayText = "") {
-  const text = sanitizeScriptText(screenplayText);
+  const text = normalizeScriptText(screenplayText);
 
   if (!text) {
     return [];
   }
 
-  const matches = [...text.matchAll(/(?=第[一二三四五六七八九十\d]+场)/g)];
+  const matches = [
+    ...text.matchAll(/(?=^(?:INT\.|EXT\.)\s+.+?\s+-\s+.+$)/gim),
+    ...text.matchAll(/(?=^第?\s*[一二三四五六七八九十\d]+\s*场)/gim),
+  ].sort((left, right) => (left.index || 0) - (right.index || 0));
 
   if (!matches.length) {
     return [text];
@@ -200,7 +352,7 @@ export function formatScreenplay(screenplayDraft) {
     "";
 
   if (scriptText) {
-    return sanitizeScriptText(scriptText);
+    return normalizeScriptText(scriptText);
   }
 
   const scenes = screenplayDraft?.scenes || [];
@@ -210,12 +362,9 @@ export function formatScreenplay(screenplayDraft) {
   }
 
   return scenes
-    .map((scene, index) => {
+    .map((scene) => {
       const lines = [];
-      const sceneNumber = scene.scene_number || index + 1;
 
-      lines.push(formatSceneNumber(sceneNumber, index + 1));
-      lines.push("");
       lines.push(getSceneHeading(scene));
       lines.push("");
 

@@ -251,6 +251,12 @@ function Studio() {
     : "待评估";
   const chapterNotice = buildChapterNotice(chapterInfo);
   const uploadedTotalWords = uploadedFiles.reduce((total, file) => total + file.wordCount, 0);
+  const scriptWordCount = countTextLength(scriptText);
+  const estimatedSceneCount = scenes.length
+    ? scenes.length
+    : chapterInfo.count
+      ? `${chapterInfo.count * 2}-${chapterInfo.count * 3}`
+      : "待识别";
 
   const pipelineSteps = [
     {
@@ -1191,18 +1197,13 @@ function Studio() {
       <section>
         <div className="mb-4">
           <p className="text-sm text-story-gold">Overview</p>
-          <h2 className="mt-1 font-serif text-2xl font-semibold">项目数据概览</h2>
+          <h2 className="mt-1 font-serif text-2xl font-semibold">项目数据预览</h2>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <StatCard label="人物数" value={characterCount} icon={UsersRound} />
-          <StatCard label="场景数" value={scenes.length || "文本"} icon={ScrollText} />
-          <StatCard label="对白数" value={dialogueCount || "待解析"} icon={Clipboard} />
-          <StatCard
-            label="情感峰值"
-            value={state.reviewResult?.scores?.emotion_score || "待检测"}
-            icon={Activity}
-          />
-          <StatCard label="改编评分" value={adaptationScore} icon={BadgeCheck} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="已识别章节数" value={`${chapterInfo.count || 0} 章`} icon={ScrollText} />
+          <StatCard label="预计场次数" value={estimatedSceneCount} icon={Clipboard} />
+          <StatCard label="剧本文字数" value={scriptWordCount || "待生成"} icon={FileCode2} />
+          <StatCard label="可导出格式" value="TXT / MD / YAML" icon={Download} />
         </div>
       </section>
 

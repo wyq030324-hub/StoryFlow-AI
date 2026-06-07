@@ -11,8 +11,36 @@ import {
 } from "../utils/screenplayFormatter.js";
 import { generateYaml } from "../utils/yamlFormatter.js";
 
-function getSceneId(scene, index) {
-  return scene?.scene_id || scene?.id || `pair-${index + 1}`;
+const fallbackScreenplay = {
+  screenplayText: `EXT. 档案馆外街 - NIGHT
+
+潮湿的风穿过旧城街口。林照站在档案馆门前，手里的钥匙被雨水打湿。
+
+林照
+（低声）
+“如果这里真的藏着答案，我今晚就必须进去。”
+
+门后的灯忽然亮起。
+
+CUT TO:
+
+INT. 档案馆大厅 - NIGHT
+
+木门缓慢打开。林照走进昏黄灯光里，墙上的档案柜像一排沉默的证人。
+
+门外来客
+（压低声音）
+“你不该打开那一层。”
+
+林照停住脚步，却没有回头。
+
+FADE OUT.`,
+};
+
+const EMPTY_SCENES = [];
+
+function getSceneId(scene, index, sourceId) {
+  return `${sourceId}-${scene?.scene_id || scene?.id || `pair-${index + 1}`}`;
 }
 
 function sceneToScript(scene, index) {
@@ -40,7 +68,7 @@ function groupParagraphsForComparison(paragraphs, targetCount) {
   ).filter(Boolean);
 }
 
-function buildPairs(paragraphs, screenplayDraft, scenes) {
+function buildPairs(paragraphs, screenplayDraft, scenes, sourceId) {
   const fullScript = formatScreenplay(screenplayDraft);
   const scriptSections = scenes.length
     ? scenes.map(sceneToScript)
@@ -50,7 +78,7 @@ function buildPairs(paragraphs, screenplayDraft, scenes) {
   const pairCount = Math.max(groupedParagraphs.length, scriptSections.length, 1);
 
   return Array.from({ length: pairCount }, (_, index) => ({
-    id: getSceneId(scenes[index], index),
+    id: getSceneId(scenes[index], index, sourceId),
     paragraph: groupedParagraphs[index] || "暂无原著内容",
     script: scriptSections[index] || "暂无改编剧本",
     scene: scenes[index] || null,
@@ -59,15 +87,21 @@ function buildPairs(paragraphs, screenplayDraft, scenes) {
 
 function Comparison() {
   const { state, dispatch } = useStory();
+  const hasGeneratedResult = Boolean(state.screenplayDraft);
+  const screenplayDraft = hasGeneratedResult ? state.screenplayDraft : fallbackScreenplay;
   const paragraphs = state.novelInput.paragraphs?.length
     ? state.novelInput.paragraphs
     : demoNovel.paragraphs;
-  const scenes = state.scenes?.length ? state.scenes : state.screenplayDraft?.scenes || [];
+  const scenes = hasGeneratedResult
+    ? state.scenes?.length
+      ? state.scenes
+      : state.screenplayDraft?.scenes || EMPTY_SCENES
+    : EMPTY_SCENES;
+  const sourceId = hasGeneratedResult ? "generated" : "sample";
   const pairs = useMemo(
-    () => buildPairs(paragraphs, state.screenplayDraft, scenes),
-    [paragraphs, scenes, state.screenplayDraft],
+    () => buildPairs(paragraphs, screenplayDraft, scenes, sourceId),
+    [paragraphs, scenes, screenplayDraft, sourceId],
   );
-  const hasWorkflowResult = Boolean(state.screenplayDraft);
   const [editedScripts, setEditedScripts] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [copyState, setCopyState] = useState("idle");
@@ -77,7 +111,7 @@ function Comparison() {
     setEditedScripts((current) => {
       const next = {};
       pairs.forEach((pair) => {
-        next[pair.id] = current[pair.id] || pair.script;
+        next[pair.id] = current[pair.id] ?? pair.script;
       });
       return next;
     });
@@ -133,32 +167,25 @@ function Comparison() {
     downloadTextFile("storyflow-screenplay.yaml", yaml);
   }
 
-  if (!hasWorkflowResult) {
-    return (
-      <section className="rounded-xl border border-story-border bg-story-card/95 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-        <p className="text-sm uppercase tracking-wide text-story-muted">原著对照</p>
-        <h1 className="mt-3 font-serif text-3xl font-semibold">等待生成改编剧本</h1>
-        <p className="mt-4 max-w-2xl text-story-muted">
-          请先回到工作台输入小说并生成剧本，再查看原著内容与改编剧本的对应关系。
-        </p>
-        <Link
-          to="/workspace"
-          className="mt-6 inline-flex rounded-md bg-story-gold px-4 py-2 text-sm font-medium text-story-bg"
-        >
-          返回工作台
-        </Link>
-      </section>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-story-border bg-story-card/95 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
         <p className="text-sm uppercase tracking-wide text-story-muted">原著对照</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">原著内容 ↔ 改编剧本</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-story-muted">
-          左侧保留原著的章节或自然段语境，右侧展示对应的一整段改编剧本。你可以直接编辑改编文本，并导出 TXT、Markdown 或结构化 YAML。
+          左侧保留原著章节或自然段语境，右侧展示对应的一整段改编剧本。你可以直接编辑右侧内容，并导出 TXT、Markdown 或 YAML。
         </p>
+        {!hasGeneratedResult ? (
+          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-story-gold/30 bg-story-gold/10 px-4 py-3 text-sm text-story-muted md:flex-row md:items-center md:justify-between">
+            <span>当前展示示例对照。生成剧本后，这里会自动替换为你的改编结果。</span>
+            <Link
+              to="/workspace"
+              className="inline-flex w-fit rounded-md bg-story-gold px-3 py-2 text-xs font-medium text-story-bg"
+            >
+              进入工作台
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-4">
@@ -226,7 +253,7 @@ function Comparison() {
                           className="inline-flex items-center gap-1 rounded-md border border-story-gold/60 px-3 py-2 text-xs text-story-gold transition hover:bg-story-gold/10"
                         >
                           <Save size={14} aria-hidden="true" />
-                          保存
+                          保存修改
                         </button>
                       ) : (
                         <button

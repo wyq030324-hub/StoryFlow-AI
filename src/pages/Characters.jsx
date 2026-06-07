@@ -476,9 +476,6 @@ function Characters() {
                     }}
                   >
                     {edge.label}
-                    <span className="ml-2 text-story-muted">
-                      S{edge.strength} / T{edge.tension}
-                    </span>
                   </span>
                 );
               })}
@@ -668,9 +665,6 @@ function Characters() {
                           <Icon size={14} style={{ color: meta.color }} aria-hidden="true" />
                           {otherNode?.name} / {edge.label}
                         </p>
-                        <span className="text-xs text-story-gold">
-                          S{edge.strength} · T{edge.tension}
-                        </span>
                       </div>
                       <p className="mt-2">{edge.directorMeaning}</p>
                     </li>
