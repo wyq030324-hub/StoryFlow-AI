@@ -1,6 +1,16 @@
 # StoryFlow AI
 
 **基于大语言模型的 AI 小说转剧本创作平台**
+## 🎬 项目演示视频（Demo Video）
+
+演示视频一https://www.bilibili.com/video/BV1qpEh6YEBN/
+演示视频二https://www.bilibili.com/video/BV1fEEh6KESg/
+
+
+
+## 项目简介
+
+基于多Agent工作流的AI小说转剧本平台
 
 StoryFlow AI 是一个面向编剧、短剧创作者和自媒体团队的 AI 创作工具。用户可以输入小说章节、故事梗概或剧情片段，系统会基于大语言模型生成可继续编辑和打磨的剧本初稿。
 
