@@ -4,25 +4,53 @@ const BANNED_PREFIXES = [
   "分析：",
   "人物关系：",
   "改编说明：",
+  "导演建议：",
+  "审查结果：",
 ];
 
+const chineseNumbers = [
+  "",
+  "一",
+  "二",
+  "三",
+  "四",
+  "五",
+  "六",
+  "七",
+  "八",
+  "九",
+  "十",
+];
+
+export function formatSceneNumber(value, fallback = 1) {
+  const number = Number(value || fallback);
+
+  if (number > 0 && number <= 10) {
+    return `第${chineseNumbers[number]}场`;
+  }
+
+  return `第${number}场`;
+}
+
+export function formatParagraphNumber(value) {
+  const number = Number(value || 1);
+
+  if (number > 0 && number <= 10) {
+    return `第${chineseNumbers[number]}段`;
+  }
+
+  return `第${number}段`;
+}
+
 function normalizeSceneType(value = "") {
-  const text = String(value || "").toUpperCase();
+  const text = String(value || "").trim().toUpperCase();
 
-  if (value === "内景" || text === "INT" || text === "INT.") {
-    return "内景";
-  }
-
-  if (value === "外景" || text === "EXT" || text === "EXT.") {
+  if (["外景", "EXT", "EXT."].includes(text)) {
     return "外景";
   }
 
-  if (String(value).includes("内") && String(value).includes("外")) {
+  if (text.includes("外") && text.includes("内")) {
     return "内景 / 外景";
-  }
-
-  if (text.includes("EXT")) {
-    return "外景";
   }
 
   return "内景";
@@ -51,27 +79,28 @@ function sanitizeScriptText(value = "") {
 }
 
 function getSceneHeading(scene) {
-  const heading = scene.heading || {};
-  const sceneType = normalizeSceneType(scene.scene_type || scene.int_ext || heading.int_ext);
-  const location = scene.location || heading.location || "未标注地点";
-  const time = scene.time || scene.timeOfDay || heading.time || "未标注时间";
+  const heading = scene?.heading || {};
+  const sceneType = normalizeSceneType(scene?.scene_type || scene?.int_ext || heading.int_ext);
+  const location = scene?.location || heading.location || "未标注地点";
+  const time = scene?.time || scene?.timeOfDay || heading.time || "未标注时间";
+
   return `${sceneType} ${location} ${time}`;
 }
 
 function getActionLines(scene) {
-  return (Array.isArray(scene.action_lines) ? scene.action_lines : [])
+  return (Array.isArray(scene?.action_lines) ? scene.action_lines : [])
     .map(sanitizeScriptLine)
     .filter(Boolean);
 }
 
 function getDialogues(scene) {
-  return Array.isArray(scene.dialogues) ? scene.dialogues : scene.dialogue || [];
+  return Array.isArray(scene?.dialogues) ? scene.dialogues : scene?.dialogue || [];
 }
 
 function formatDialogue(dialogue) {
-  const character = String(dialogue.character || dialogue.name || "角色").trim();
-  const parenthetical = sanitizeScriptLine(dialogue.parenthetical || "");
-  const line = sanitizeScriptLine(dialogue.line || dialogue.text || "");
+  const character = String(dialogue?.character || dialogue?.name || "角色").trim();
+  const parenthetical = sanitizeScriptLine(dialogue?.parenthetical || "");
+  const line = sanitizeScriptLine(dialogue?.line || dialogue?.text || "");
   const parts = [character];
 
   if (parenthetical) {
@@ -92,11 +121,33 @@ function normalizeTransition(transition = "") {
     return "CUT TO:";
   }
 
-  return text.endsWith(":") ? text : `${text}:`;
+  return text.endsWith(":") || text.endsWith("：") ? text : `${text}:`;
 }
 
 export function formatSceneHeading(scene) {
   return getSceneHeading(scene);
+}
+
+export function splitScreenplayIntoSections(screenplayText = "") {
+  const text = sanitizeScriptText(screenplayText);
+
+  if (!text) {
+    return [];
+  }
+
+  const matches = [...text.matchAll(/(?=第[一二三四五六七八九十\d]+场)/g)];
+
+  if (!matches.length) {
+    return [text];
+  }
+
+  return matches
+    .map((match, index) => {
+      const start = match.index || 0;
+      const end = matches[index + 1]?.index ?? text.length;
+      return text.slice(start, end).trim();
+    })
+    .filter(Boolean);
 }
 
 export function formatScreenplay(screenplayDraft) {
@@ -122,7 +173,7 @@ export function formatScreenplay(screenplayDraft) {
       const lines = [];
       const sceneNumber = scene.scene_number || index + 1;
 
-      lines.push(`第${sceneNumber}场`);
+      lines.push(formatSceneNumber(sceneNumber, index + 1));
       lines.push("");
       lines.push(getSceneHeading(scene));
       lines.push("");
@@ -147,18 +198,21 @@ export function formatScreenplay(screenplayDraft) {
         lines.push("");
       }
 
-      const soundHint = sanitizeScriptLine(
-        scene.sound_design_hint?.key_sound || scene.sound_design_hint?.ambient || "",
-      );
-      if (soundHint) {
-        lines.push("音效");
-        lines.push(soundHint);
-        lines.push("");
-      }
-
       lines.push(normalizeTransition(scene.transition));
 
       return lines.join("\n").trim();
     })
     .join("\n\n");
+}
+
+export function downloadTextFile(filename, content) {
+  const blob = new Blob([content || ""], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
 }

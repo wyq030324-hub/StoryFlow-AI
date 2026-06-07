@@ -4,8 +4,10 @@ import {
   CheckCircle2,
   Clipboard,
   Database,
+  Download,
   Eraser,
   FileCode2,
+  FileUp,
   GitCompare,
   Loader2,
   PlayCircle,
@@ -21,11 +23,7 @@ import { Link } from "react-router-dom";
 import { runDirectorReviewer } from "../agents/directorReviewer.js";
 import { runScreenplayWriter } from "../agents/screenplayWriter.js";
 import { characterGraph as mockCharacterGraph } from "../data/characterGraph.js";
-import {
-  AGENT_KEYS,
-  storyActionTypes,
-  useStory,
-} from "../context/StoryContext.jsx";
+import { AGENT_KEYS, storyActionTypes, useStory } from "../context/StoryContext.jsx";
 import {
   runOptionalCharacterGraph,
   runOptionalDirectorReview,
@@ -33,7 +31,10 @@ import {
   runOptionalRewriteSuggestions,
   runScriptOnlyWorkflow,
 } from "../services/aiClient.js";
-import { formatScreenplay } from "../utils/screenplayFormatter.js";
+import {
+  downloadTextFile,
+  formatScreenplay,
+} from "../utils/screenplayFormatter.js";
 import { generateYaml } from "../utils/yamlFormatter.js";
 
 const statusClass = {
@@ -46,7 +47,7 @@ const statusClass = {
 
 const statusLabel = {
   waiting: "等待中",
-  running: "处理中",
+  running: "创作中",
   done: "已完成",
   error: "失败",
 };
@@ -69,7 +70,6 @@ function getIssues(reviewResult) {
       return {
         problem: issue,
         suggestion: "",
-        severity: "",
         scene_id: "",
       };
     }
@@ -111,26 +111,29 @@ function StatCard({ label, value, icon: Icon }) {
 }
 
 function ModeSwitch({ value, onChange, disabled }) {
+  const options = [
+    ["real", "AI 创作模式", "根据输入内容生成剧本"],
+    ["mock", "演示模式", "使用内置示例快速体验流程"],
+  ];
+
   return (
     <div className="rounded-xl border border-story-border bg-story-bg/80 p-4">
-      <p className="text-xs text-story-muted">运行模式</p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        {[
-          ["mock", "Demo Mode"],
-          ["real", "Real AI Mode"],
-        ].map(([mode, label]) => (
+      <p className="text-xs text-story-muted">创作模式</p>
+      <div className="mt-3 grid gap-2">
+        {options.map(([mode, label, description]) => (
           <button
             key={mode}
             type="button"
             disabled={disabled}
             onClick={() => onChange(mode)}
-            className={`rounded-lg border px-3 py-2 text-sm transition ${
+            className={`rounded-lg border px-3 py-3 text-left text-sm transition ${
               value === mode
                 ? "border-story-gold bg-story-gold/10 text-story-gold"
                 : "border-story-border text-story-muted hover:border-story-gold/60 hover:text-story-text"
             } disabled:cursor-not-allowed disabled:opacity-50`}
           >
-            {label}
+            <span className="block font-medium">{label}</span>
+            <span className="mt-1 block text-xs text-story-muted">{description}</span>
           </button>
         ))}
       </div>
@@ -149,12 +152,14 @@ function OptionalResultBlock({ title, children }) {
 
 function Studio() {
   const { state, dispatch } = useStory();
-  const [aiMode, setAiMode] = useState("mock");
+  const [aiMode, setAiMode] = useState("real");
   const [copyState, setCopyState] = useState("idle");
   const [scriptCopyState, setScriptCopyState] = useState("idle");
   const [isYamlVisible, setIsYamlVisible] = useState(false);
   const [optionalLoading, setOptionalLoading] = useState(null);
+  const [uploadHint, setUploadHint] = useState("");
   const screenplayRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const isRunning = state.agentStatus[AGENT_KEYS.screenplayWriter] === "running";
   const canStart = Boolean(state.novelInput.content.trim()) && !isRunning;
@@ -180,21 +185,21 @@ function Studio() {
       id: "input",
       index: "01",
       label: "小说输入",
-      description: "准备原文",
+      description: "粘贴或导入原文",
       status: state.novelInput.content.trim() ? "done" : "waiting",
     },
     {
       id: "script",
       index: "02",
       label: "剧本生成",
-      description: "只生成剧本正文",
+      description: "改编为影视剧本",
       status: state.agentStatus[AGENT_KEYS.screenplayWriter] || "waiting",
     },
     {
       id: "output",
       index: "03",
       label: "结果输出",
-      description: "展示完整剧本",
+      description: "查看、复制与导出",
       status: scriptText ? "done" : "waiting",
     },
   ];
@@ -211,6 +216,7 @@ function Studio() {
     setCopyState("idle");
     setScriptCopyState("idle");
     setIsYamlVisible(false);
+    setUploadHint("");
   }
 
   function clearNovelInput() {
@@ -229,6 +235,36 @@ function Studio() {
     setCopyState("idle");
     setScriptCopyState("idle");
     setIsYamlVisible(false);
+    setUploadHint("");
+  }
+
+  async function handleDocumentUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const extension = file.name.split(".").pop()?.toLowerCase();
+
+    if (extension === "txt") {
+      const content = await file.text();
+      updateNovelInput({
+        title: state.novelInput.title || file.name.replace(/\.txt$/i, ""),
+        content,
+        source: "upload",
+      });
+      setUploadHint("文档内容已导入，可继续编辑后生成剧本。");
+      return;
+    }
+
+    if (extension === "docx") {
+      setUploadHint("Word 文档导入已预留，当前版本请先复制正文或上传 TXT 文档。");
+      return;
+    }
+
+    setUploadHint("当前支持 TXT 文档。Word 文档可先复制正文到输入框。");
   }
 
   async function runDemoScriptOnly() {
@@ -279,9 +315,7 @@ function Studio() {
         type: storyActionTypes.SET_AGENT_ERROR,
         payload: {
           agent: AGENT_KEYS.screenplayWriter,
-          error:
-            error.message ||
-            "剧本生成失败，请检查 API Key、网络连接或本地 server 是否已启动。",
+          error: error.message || "剧本生成失败，请确认创作服务已启动并稍后重试。",
         },
       });
     }
@@ -293,7 +327,7 @@ function Studio() {
         type: storyActionTypes.SET_AGENT_ERROR,
         payload: {
           agent: AGENT_KEYS.screenplayWriter,
-          error: "请先生成剧本，再使用增强分析功能。",
+          error: "请先生成剧本，再使用增强分析能力。",
         },
       });
       return;
@@ -334,21 +368,6 @@ function Studio() {
             : {
                 short_drama_score: 86,
                 platform_analysis: {
-                  douyin: {
-                    score: 88,
-                    hook_potential: "开场悬疑钩子清晰，适合短节奏切入。",
-                    risk: "世界观信息需要更快视觉化。",
-                  },
-                  kuaishou: {
-                    score: 82,
-                    hook_potential: "亲情与身份追寻具备连续追看动机。",
-                    risk: "概念表达不能过重。",
-                  },
-                  bilibili: {
-                    score: 84,
-                    hook_potential: "悬疑奇幻设定适合长评与二创讨论。",
-                    risk: "需要保留更强作者风格。",
-                  },
                   overall_recommendation:
                     "适合悬疑短剧化，建议每集结尾保留一个记忆被改写的强钩子。",
                 },
@@ -407,6 +426,11 @@ function Studio() {
     window.setTimeout(() => setState("idle"), 1800);
   }
 
+  function exportMarkdown() {
+    const title = state.screenplayDraft?.screenplay?.title || state.novelInput.title || "StoryFlow 剧本";
+    downloadTextFile("storyflow-screenplay.md", `# ${title}\n\n${scriptText}`);
+  }
+
   function scrollToScreenplay() {
     screenplayRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -452,7 +476,7 @@ function Studio() {
               输入小说，生成专业影视剧本
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-7 text-story-muted md:text-base md:leading-8">
-              当前主流程已优化为“小说输入 → 剧本生成 → 结果输出”。人物情感宇宙、导演审查、平台分析和改写建议改为自愿生成，避免占用剧本生成的 token 与等待时间。
+              从小说章节、故事梗概或剧情片段出发，快速生成可继续打磨的剧本初稿，并按创作需要扩展人物分析、导演审查、平台适配和创意重构。
             </p>
           </div>
           <Link
@@ -471,10 +495,26 @@ function Studio() {
               <p className="text-sm text-story-gold">Novel Input</p>
               <h2 className="mt-1 font-serif text-2xl font-semibold">小说输入区</h2>
               <p className="mt-2 text-sm leading-6 text-story-muted">
-                粘贴小说片段后点击生成剧本。主按钮只调用剧本生成 Agent，不会自动触发其他分析能力。
+                支持手动粘贴或上传文本文件。导入后仍可继续修改，再生成剧本。
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.docx"
+                onChange={handleDocumentUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isRunning}
+                className="inline-flex items-center gap-2 rounded-md border border-story-border bg-story-bg px-4 py-3 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FileUp size={16} aria-hidden="true" />
+                上传文档
+              </button>
               <button
                 type="button"
                 onClick={loadDemo}
@@ -509,6 +549,13 @@ function Studio() {
             </div>
           </div>
 
+          <p className="mt-4 text-xs text-story-muted">支持 TXT / Word。当前 TXT 可直接导入，Word 可复制正文后粘贴。</p>
+          {uploadHint ? (
+            <p className="mt-2 rounded-md border border-story-gold/40 bg-story-gold/10 px-3 py-2 text-xs text-story-gold">
+              {uploadHint}
+            </p>
+          ) : null}
+
           <label htmlFor="novel-title" className="mt-6 block text-sm font-medium text-story-text">
             小说标题
           </label>
@@ -531,7 +578,7 @@ function Studio() {
             disabled={isRunning}
             rows={14}
             className="mt-2 w-full resize-y rounded-md border border-story-border bg-story-bg px-3 py-3 text-sm leading-7 text-story-text outline-none transition placeholder:text-story-muted focus:border-story-gold disabled:opacity-60"
-            placeholder="粘贴小说片段，或点击加载示例小说"
+            placeholder="粘贴小说片段，或上传 TXT 文档"
           />
         </article>
 
@@ -541,12 +588,12 @@ function Studio() {
       <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-story-gold">Script Only Flow</p>
-            <h2 className="mt-1 font-serif text-2xl font-semibold">主链路：小说到剧本</h2>
+            <p className="text-sm text-story-gold">Creation Flow</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold">创作流程</h2>
           </div>
           <div className="flex flex-wrap gap-3">
             <p className="text-sm text-story-muted">
-              当前模式：{aiMode === "real" ? "Real AI Mode" : "Demo Mode"}
+              当前模式：{aiMode === "real" ? "AI 创作模式" : "演示模式"}
             </p>
             {scriptText ? (
               <button
@@ -592,7 +639,7 @@ function Studio() {
             {isRunning
               ? "正在生成剧本，请稍候……"
               : scriptText
-                ? "剧本已生成。你可以继续查看完整剧本，或按需生成增强分析。"
+                ? "剧本已生成。你可以继续查看完整剧本，或根据创作需要选择增强分析能力。"
                 : "请输入小说内容并点击生成剧本。"}
           </p>
         </div>
@@ -607,22 +654,42 @@ function Studio() {
             <p className="text-sm text-story-gold">Professional Screenplay</p>
             <h2 className="mt-1 font-serif text-3xl font-semibold">完整剧本</h2>
             <p className="mt-1 text-sm text-story-muted">
-              这里展示主链路唯一生成结果：正式剧本正文。
+              以影视剧本格式展示，可复制、导出并继续修改。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => copyText(scriptText, setScriptCopyState)}
-            disabled={!scriptText}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {scriptCopyState === "copied" ? (
-              <CheckCircle2 size={16} aria-hidden="true" />
-            ) : (
-              <Clipboard size={16} aria-hidden="true" />
-            )}
-            {scriptCopyState === "copied" ? "已复制" : "复制完整剧本"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => copyText(scriptText, setScriptCopyState)}
+              disabled={!scriptText}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {scriptCopyState === "copied" ? (
+                <CheckCircle2 size={16} aria-hidden="true" />
+              ) : (
+                <Clipboard size={16} aria-hidden="true" />
+              )}
+              {scriptCopyState === "copied" ? "已复制" : "复制剧本"}
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadTextFile("storyflow-screenplay.txt", scriptText)}
+              disabled={!scriptText}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={16} aria-hidden="true" />
+              导出 TXT
+            </button>
+            <button
+              type="button"
+              onClick={exportMarkdown}
+              disabled={!scriptText}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={16} aria-hidden="true" />
+              导出 Markdown
+            </button>
+          </div>
         </div>
 
         {!scriptText ? (
@@ -646,10 +713,10 @@ function Studio() {
       <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm text-story-gold">Optional Analysis</p>
-            <h2 className="mt-1 font-serif text-2xl font-semibold">增强分析：按需生成</h2>
+            <p className="text-sm text-story-gold">Creative Extensions</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold">增强分析</h2>
             <p className="mt-2 text-sm leading-6 text-story-muted">
-              这些能力不会随“生成剧本”自动执行。只有点击对应按钮时，才会请求 API 或生成本地 Demo 结果。
+              根据创作需要选择增强分析能力。
             </p>
           </div>
         </div>
@@ -801,7 +868,7 @@ function Studio() {
         {[
           ["/characters", UsersRound, "人物感情线", "查看角色关系与叙事图谱"],
           ["/rewrite", Wand2, "创意重构", "尝试不同导演风格"],
-          ["/comparison", GitCompare, "原著对照", "追踪原文与 Scene 对应"],
+          ["/comparison", GitCompare, "原著对照", "支持从原著到剧本的对照编辑"],
           ["/review", ScrollText, "导演审查", "阅读专业审查建议"],
         ].map(([path, Icon, title, desc]) => (
           <Link
@@ -819,10 +886,10 @@ function Studio() {
       <section className="rounded-xl border border-story-border bg-story-card/95 p-5 shadow-[0_18px_70px_rgba(0,0,0,0.22)]">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm text-story-muted">技术交付</p>
-            <h2 className="font-serif text-2xl font-semibold">查看技术结构 / YAML 导出</h2>
+            <p className="text-sm text-story-muted">结构化交付</p>
+            <h2 className="font-serif text-2xl font-semibold">YAML 导出</h2>
             <p className="mt-1 text-sm text-story-muted">
-              YAML 默认折叠，面向后续分镜、配音、短剧生成和多模型审查。
+              用于后续分镜、配音、短剧制作和团队协作。
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -833,7 +900,7 @@ function Studio() {
               className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
               <FileCode2 size={16} aria-hidden="true" />
-              {isYamlVisible ? "收起 YAML" : "查看技术结构 / YAML 导出"}
+              {isYamlVisible ? "收起 YAML" : "查看 YAML"}
             </button>
             <button
               type="button"
@@ -857,7 +924,7 @@ function Studio() {
             value={state.generatedYaml}
             rows={16}
             className="mt-4 w-full resize-y rounded-md border border-story-gold/40 bg-story-bg px-3 py-3 font-mono text-xs leading-6 text-story-text outline-none"
-            placeholder="生成剧本后，可以在这里查看技术结构。"
+            placeholder="生成剧本后，可以在这里查看结构化内容。"
           />
         ) : null}
       </section>

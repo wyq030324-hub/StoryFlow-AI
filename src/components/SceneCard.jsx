@@ -1,3 +1,5 @@
+import { formatSceneNumber } from "../utils/screenplayFormatter.js";
+
 function getSceneId(scene) {
   return scene.scene_id || scene.id;
 }
@@ -5,9 +7,9 @@ function getSceneId(scene) {
 function getHeading(scene) {
   return (
     scene.heading || {
-      int_ext: "INT.",
+      int_ext: scene.int_ext || "内景",
       location: scene.location || "未标注地点",
-      time: scene.timeOfDay || "未标注时间",
+      time: scene.timeOfDay || scene.time || "未标注时间",
       atmosphere: scene.summary || "未标注氛围",
     }
   );
@@ -26,6 +28,7 @@ function SceneCard({ scene, isActive = false, onClick }) {
   const heading = getHeading(scene);
   const actionLines = getActionLines(scene);
   const dialogues = getDialogues(scene);
+  const sceneLabel = formatSceneNumber(scene.scene_number || sceneId?.match(/\d+/)?.[0] || 1);
 
   return (
     <article
@@ -39,10 +42,10 @@ function SceneCard({ scene, isActive = false, onClick }) {
       <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs uppercase tracking-wide text-story-muted">
-            场景 {sceneId}
+            {sceneLabel}
           </p>
           <h3 className="mt-1 font-serif text-xl font-semibold text-story-text">
-            {scene.title}
+            {scene.title || "未命名场次"}
           </h3>
         </div>
         <div className="rounded-md border border-story-border px-3 py-2 text-xs text-story-muted">
@@ -62,7 +65,7 @@ function SceneCard({ scene, isActive = false, onClick }) {
         <div>
           <dt className="text-story-muted">改编目的</dt>
           <dd className="mt-1 text-story-text">
-            {scene.purpose || scene.summary}
+            {scene.purpose || scene.summary || "暂无说明"}
           </dd>
         </div>
       </dl>
@@ -70,32 +73,40 @@ function SceneCard({ scene, isActive = false, onClick }) {
       <div className="mt-4">
         <p className="text-story-muted">动作与画面</p>
         <ul className="mt-2 space-y-2 text-story-text">
-          {actionLines.map((line) => (
-            <li
-              key={line}
-              className="rounded-md border border-story-border bg-story-bg/80 px-3 py-2"
-            >
-              {line}
-            </li>
-          ))}
+          {actionLines.length ? (
+            actionLines.map((line) => (
+              <li
+                key={line}
+                className="rounded-md border border-story-border bg-story-bg/80 px-3 py-2"
+              >
+                {line}
+              </li>
+            ))
+          ) : (
+            <li className="text-story-muted">暂无动作描写</li>
+          )}
         </ul>
       </div>
 
       <div className="mt-4">
         <p className="text-story-muted">角色台词</p>
         <ul className="mt-2 space-y-2">
-          {dialogues.map((dialogue) => (
-            <li
-              key={`${dialogue.character}-${dialogue.line}`}
-              className="rounded-md border border-story-border px-3 py-2"
-            >
-              <span className="font-medium text-story-gold">
-                {dialogue.character}
-              </span>
-              <span className="text-story-muted">: </span>
-              <span className="text-story-text">{dialogue.line}</span>
-            </li>
-          ))}
+          {dialogues.length ? (
+            dialogues.map((dialogue) => (
+              <li
+                key={`${dialogue.character}-${dialogue.line}`}
+                className="rounded-md border border-story-border px-3 py-2"
+              >
+                <span className="font-medium text-story-gold">
+                  {dialogue.character}
+                </span>
+                <span className="text-story-muted">：</span>
+                <span className="text-story-text">{dialogue.line}</span>
+              </li>
+            ))
+          ) : (
+            <li className="text-story-muted">暂无台词</li>
+          )}
         </ul>
       </div>
     </article>

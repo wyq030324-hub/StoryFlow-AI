@@ -554,7 +554,7 @@ function Characters() {
             </dl>
 
             <div className="mt-6">
-              <p className="text-sm text-story-muted">出场 Scene</p>
+              <p className="text-sm text-story-muted">出场场次</p>
               <div className="mt-3 grid gap-2">
                 {activeNode.scenes.map((scene) => (
                   <span
@@ -636,4 +636,5 @@ function Characters() {
 }
 
 export default Characters;
+
 
