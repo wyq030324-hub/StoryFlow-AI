@@ -4,7 +4,7 @@
 ## 🎬 项目演示视频（Demo Video）
 
 演示视频一https://www.bilibili.com/video/BV1fEEh6KESg/
-演示视频二https://www.bilibili.com/video/BV1fEEh6KESg/
+演示视频二https://www.bilibili.com/video/BV1qpEh6YEBN/
 
 
 
