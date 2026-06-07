@@ -22,6 +22,9 @@ const chineseNumbers = [
   "十",
 ];
 
+const dialoguePunctuationPattern = /[。！？…!?]$/;
+const dialogueQuotePattern = /^["“].*["”]$/s;
+
 export function formatSceneNumber(value, fallback = 1) {
   const number = Number(value || fallback);
 
@@ -97,21 +100,59 @@ function getDialogues(scene) {
   return Array.isArray(scene?.dialogues) ? scene.dialogues : scene?.dialogue || [];
 }
 
+function normalizeParenthetical(value = "") {
+  const text = sanitizeScriptLine(value);
+
+  if (!text) {
+    return "";
+  }
+
+  if (/^（.*）$/.test(text)) {
+    return text;
+  }
+
+  return `（${text.replace(/^[（(]+|[）)]+$/g, "")}）`;
+}
+
+function normalizeDialogueLine(value = "") {
+  const text = sanitizeScriptLine(value);
+
+  if (!text) {
+    return "";
+  }
+
+  const unwrapped = text.replace(/^["“]+|["”]+$/g, "").trim();
+
+  if (!unwrapped) {
+    return "";
+  }
+
+  const withPunctuation = dialoguePunctuationPattern.test(unwrapped)
+    ? unwrapped
+    : `${unwrapped}。`;
+
+  if (dialogueQuotePattern.test(text)) {
+    return `“${withPunctuation.replace(/^["“]+|["”]+$/g, "")}”`;
+  }
+
+  return `“${withPunctuation}”`;
+}
+
 function formatDialogue(dialogue) {
   const character = String(dialogue?.character || dialogue?.name || "角色").trim();
-  const parenthetical = sanitizeScriptLine(dialogue?.parenthetical || "");
-  const line = sanitizeScriptLine(dialogue?.line || dialogue?.text || "");
+  const parenthetical = normalizeParenthetical(dialogue?.parenthetical || dialogue?.emotion || "");
+  const line = normalizeDialogueLine(dialogue?.line || dialogue?.text || "");
   const parts = [character];
 
   if (parenthetical) {
-    parts.push(`（${parenthetical}）`);
+    parts.push(parenthetical);
   }
 
   if (line) {
     parts.push(line);
   }
 
-  return parts.join("\n");
+  return parts.filter(Boolean).join("\n");
 }
 
 function normalizeTransition(transition = "") {
@@ -194,7 +235,7 @@ export function formatScreenplay(screenplayDraft) {
       const narrator = sanitizeScriptLine(scene.narration || scene.voice_over || "");
       if (narrator) {
         lines.push("旁白");
-        lines.push(narrator);
+        lines.push(normalizeDialogueLine(narrator));
         lines.push("");
       }
 

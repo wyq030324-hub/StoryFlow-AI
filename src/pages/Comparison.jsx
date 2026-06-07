@@ -12,7 +12,7 @@ import {
 import { generateYaml } from "../utils/yamlFormatter.js";
 
 function getSceneId(scene, index) {
-  return scene?.scene_id || scene?.id || `part-${index + 1}`;
+  return scene?.scene_id || scene?.id || `pair-${index + 1}`;
 }
 
 function sceneToScript(scene, index) {
@@ -30,16 +30,28 @@ function sceneToScript(scene, index) {
   });
 }
 
+function groupParagraphsForComparison(paragraphs, targetCount) {
+  const cleanParagraphs = (paragraphs || []).filter(Boolean);
+  const count = Math.max(targetCount, 1);
+  const groupSize = Math.ceil(cleanParagraphs.length / count);
+
+  return Array.from({ length: count }, (_, index) =>
+    cleanParagraphs.slice(index * groupSize, (index + 1) * groupSize).join("\n\n"),
+  ).filter(Boolean);
+}
+
 function buildPairs(paragraphs, screenplayDraft, scenes) {
   const fullScript = formatScreenplay(screenplayDraft);
   const scriptSections = scenes.length
     ? scenes.map(sceneToScript)
     : splitScreenplayIntoSections(fullScript);
-  const count = Math.max(paragraphs.length, scriptSections.length);
+  const targetCount = scriptSections.length || scenes.length || 1;
+  const groupedParagraphs = groupParagraphsForComparison(paragraphs, targetCount);
+  const pairCount = Math.max(groupedParagraphs.length, scriptSections.length, 1);
 
-  return Array.from({ length: count }, (_, index) => ({
+  return Array.from({ length: pairCount }, (_, index) => ({
     id: getSceneId(scenes[index], index),
-    paragraph: paragraphs[index] || "暂无原著段落",
+    paragraph: groupedParagraphs[index] || "暂无原著内容",
     script: scriptSections[index] || "暂无改编剧本",
     scene: scenes[index] || null,
   }));
@@ -145,7 +157,7 @@ function Comparison() {
         <p className="text-sm uppercase tracking-wide text-story-muted">原著对照</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">原著内容 ↔ 改编剧本</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-story-muted">
-          左侧保留原著阅读语境，右侧展示对应的影视剧本。你可以直接编辑改编文本，并导出 TXT、Markdown 或结构化 YAML。
+          左侧保留原著的章节或自然段语境，右侧展示对应的一整段改编剧本。你可以直接编辑改编文本，并导出 TXT、Markdown 或结构化 YAML。
         </p>
       </section>
 
@@ -156,8 +168,8 @@ function Comparison() {
             <h2 className="mt-1 font-serif text-xl font-semibold">原著内容 ↔ 改编剧本</h2>
           </div>
           <div className="flex flex-wrap gap-3 text-xs text-story-muted">
-            <span className="rounded-full border border-story-border px-3 py-1">{paragraphs.length} 段原著</span>
-            <span className="rounded-full border border-story-border px-3 py-1">{pairs.length} 段改编</span>
+            <span className="rounded-full border border-story-border px-3 py-1">{pairs.length} 组对照</span>
+            <span className="rounded-full border border-story-border px-3 py-1">{scenes.length || pairs.length} 段剧本</span>
             <span className="rounded-full border border-story-gold/60 px-3 py-1 text-story-gold">
               当前：{formatParagraphNumber(pairs.findIndex((pair) => pair.id === activeSceneId) + 1 || 1)}
             </span>
@@ -179,7 +191,7 @@ function Comparison() {
               }`}
               onClick={() => setActiveScene(pair.id)}
             >
-              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.25fr)]">
+              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.28fr)]">
                 <div className="min-w-0 overflow-hidden rounded-lg border border-story-border bg-story-bg/80 p-4">
                   <span className="text-xs uppercase tracking-wide text-story-muted">
                     {formatParagraphNumber(index + 1)}
@@ -194,12 +206,15 @@ function Comparison() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <span className="text-xs uppercase tracking-wide text-story-muted">
-                        {pair.scene ? `第${pair.scene.scene_number || index + 1}场` : formatParagraphNumber(index + 1)}
+                        {pair.scene
+                          ? `第${pair.scene.scene_number || index + 1}场`
+                          : formatParagraphNumber(index + 1)}
                       </span>
                       <h3 className="mt-2 font-serif text-xl font-semibold text-story-text">
                         改编剧本
                       </h3>
                     </div>
+
                     <div className="flex flex-wrap gap-2">
                       {isEditing ? (
                         <button
@@ -283,11 +298,11 @@ function Comparison() {
                           [pair.id]: event.target.value,
                         }))
                       }
-                      rows={12}
+                      rows={14}
                       className="mt-4 w-full resize-y rounded-md border border-story-gold/40 bg-story-card px-3 py-3 font-mono text-sm leading-7 text-story-text outline-none focus:border-story-gold"
                     />
                   ) : (
-                    <pre className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-story-border bg-story-card/70 px-3 py-3 font-mono text-sm leading-7 text-story-text">
+                    <pre className="mt-4 max-h-[560px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-story-border bg-story-card/70 px-3 py-3 font-mono text-sm leading-7 text-story-text">
                       {scriptValue}
                     </pre>
                   )}

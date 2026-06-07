@@ -13,6 +13,10 @@ function AppRoutes() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
+
+  useEffect(() => {
     setIsVisible(false);
     const frame = window.requestAnimationFrame(() => {
       setIsVisible(true);

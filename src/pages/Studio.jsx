@@ -23,6 +23,7 @@ import { Link } from "react-router-dom";
 import { runDirectorReviewer } from "../agents/directorReviewer.js";
 import { runScreenplayWriter } from "../agents/screenplayWriter.js";
 import { characterGraph as mockCharacterGraph } from "../data/characterGraph.js";
+import { demoNovels } from "../data/demoNovels.js";
 import { AGENT_KEYS, storyActionTypes, useStory } from "../context/StoryContext.jsx";
 import {
   runOptionalCharacterGraph,
@@ -216,6 +217,7 @@ function Studio() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadErrors, setUploadErrors] = useState([]);
   const [chapterInfo, setChapterInfo] = useState(() => detectChapters(""));
+  const [showDemoLibrary, setShowDemoLibrary] = useState(false);
   const screenplayRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -289,8 +291,26 @@ function Studio() {
     });
   }
 
-  function loadDemo() {
-    dispatch({ type: storyActionTypes.LOAD_DEMO });
+  function loadDemo(selectedNovel = demoNovels[0]) {
+    if (!selectedNovel) {
+      return;
+    }
+
+    dispatch({ type: storyActionTypes.RESET_WORKFLOW });
+    dispatch({
+      type: storyActionTypes.SET_NOVEL_INPUT,
+      payload: {
+        title: selectedNovel.title,
+        content: selectedNovel.content,
+        paragraphs: selectedNovel.content
+          .split(/\n+/)
+          .map((paragraph) => paragraph.trim())
+          .filter(Boolean),
+        source: "demo",
+        wordCount: countTextLength(selectedNovel.content),
+        styleTags: [selectedNovel.description, selectedNovel.bestFor].filter(Boolean),
+      },
+    });
     setCopyState("idle");
     setScriptCopyState("idle");
     setIsYamlVisible(false);
@@ -298,6 +318,7 @@ function Studio() {
     setInputMode("manual");
     setUploadedFiles([]);
     setUploadErrors([]);
+    setShowDemoLibrary(false);
   }
 
   function clearNovelInput() {
@@ -666,12 +687,12 @@ function Studio() {
               </button>
               <button
                 type="button"
-                onClick={loadDemo}
+                onClick={() => setShowDemoLibrary((visible) => !visible)}
                 disabled={isRunning}
                 className="inline-flex items-center gap-2 rounded-md border border-story-border bg-story-bg px-4 py-3 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Database size={16} aria-hidden="true" />
-                加载示例小说
+                示例小说库 {showDemoLibrary ? "▴" : "▾"}
               </button>
               <button
                 type="button"
@@ -697,6 +718,42 @@ function Studio() {
               </button>
             </div>
           </div>
+
+          {showDemoLibrary ? (
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+              {demoNovels.map((novel) => (
+                <article
+                  key={novel.id}
+                  className="rounded-xl border border-story-border bg-story-card p-4 transition hover:border-story-gold/40"
+                >
+                  <div className="flex h-full flex-col">
+                    <div>
+                      <h3 className="font-serif text-lg font-semibold text-story-gold">
+                        {novel.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-story-muted">
+                        {novel.description}
+                      </p>
+                      <p className="mt-3 text-xs leading-5 text-story-muted">
+                        适合展示：{novel.bestFor}
+                      </p>
+                      <p className="mt-2 text-xs text-story-muted">
+                        {novel.chapterCount} 章 · {countTextLength(novel.content)} 字
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => loadDemo(novel)}
+                      disabled={isRunning}
+                      className="mt-4 inline-flex items-center justify-center rounded-md border border-story-gold/40 bg-story-gold/10 px-3 py-2 text-xs font-medium text-story-gold transition hover:bg-story-gold/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      加载此示例
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
 
           <div className="mt-5 inline-flex rounded-lg border border-story-border bg-story-bg p-1 text-sm">
             {[
