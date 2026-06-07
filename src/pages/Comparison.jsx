@@ -9,9 +9,38 @@ import {
   formatScreenplay,
   splitScreenplayIntoSections,
 } from "../utils/screenplayFormatter.js";
+import { generateYaml } from "../utils/yamlFormatter.js";
 
-function getSceneId(scene, index) {
-  return scene?.scene_id || scene?.id || `part-${index + 1}`;
+const fallbackScreenplay = {
+  screenplayText: `EXT. 档案馆外街 - NIGHT
+
+潮湿的风穿过旧城街口。林照站在档案馆门前，手里的钥匙被雨水打湿。
+
+林照
+（低声）
+“如果这里真的藏着答案，我今晚就必须进去。”
+
+门后的灯忽然亮起。
+
+CUT TO:
+
+INT. 档案馆大厅 - NIGHT
+
+木门缓慢打开。林照走进昏黄灯光里，墙上的档案柜像一排沉默的证人。
+
+门外来客
+（压低声音）
+“你不该打开那一层。”
+
+林照停住脚步，却没有回头。
+
+FADE OUT.`,
+};
+
+const EMPTY_SCENES = [];
+
+function getSceneId(scene, index, sourceId) {
+  return `${sourceId}-${scene?.scene_id || scene?.id || `pair-${index + 1}`}`;
 }
 
 function sceneToScript(scene, index) {
@@ -29,16 +58,28 @@ function sceneToScript(scene, index) {
   });
 }
 
-function buildPairs(paragraphs, screenplayDraft, scenes) {
+function groupParagraphsForComparison(paragraphs, targetCount) {
+  const cleanParagraphs = (paragraphs || []).filter(Boolean);
+  const count = Math.max(targetCount, 1);
+  const groupSize = Math.ceil(cleanParagraphs.length / count);
+
+  return Array.from({ length: count }, (_, index) =>
+    cleanParagraphs.slice(index * groupSize, (index + 1) * groupSize).join("\n\n"),
+  ).filter(Boolean);
+}
+
+function buildPairs(paragraphs, screenplayDraft, scenes, sourceId) {
   const fullScript = formatScreenplay(screenplayDraft);
   const scriptSections = scenes.length
     ? scenes.map(sceneToScript)
     : splitScreenplayIntoSections(fullScript);
-  const count = Math.max(paragraphs.length, scriptSections.length);
+  const targetCount = scriptSections.length || scenes.length || 1;
+  const groupedParagraphs = groupParagraphsForComparison(paragraphs, targetCount);
+  const pairCount = Math.max(groupedParagraphs.length, scriptSections.length, 1);
 
-  return Array.from({ length: count }, (_, index) => ({
-    id: getSceneId(scenes[index], index),
-    paragraph: paragraphs[index] || "暂无原著段落",
+  return Array.from({ length: pairCount }, (_, index) => ({
+    id: getSceneId(scenes[index], index, sourceId),
+    paragraph: groupedParagraphs[index] || "暂无原著内容",
     script: scriptSections[index] || "暂无改编剧本",
     scene: scenes[index] || null,
   }));
@@ -46,15 +87,21 @@ function buildPairs(paragraphs, screenplayDraft, scenes) {
 
 function Comparison() {
   const { state, dispatch } = useStory();
+  const hasGeneratedResult = Boolean(state.screenplayDraft);
+  const screenplayDraft = hasGeneratedResult ? state.screenplayDraft : fallbackScreenplay;
   const paragraphs = state.novelInput.paragraphs?.length
     ? state.novelInput.paragraphs
     : demoNovel.paragraphs;
-  const scenes = state.scenes?.length ? state.scenes : state.screenplayDraft?.scenes || [];
+  const scenes = hasGeneratedResult
+    ? state.scenes?.length
+      ? state.scenes
+      : state.screenplayDraft?.scenes || EMPTY_SCENES
+    : EMPTY_SCENES;
+  const sourceId = hasGeneratedResult ? "generated" : "sample";
   const pairs = useMemo(
-    () => buildPairs(paragraphs, state.screenplayDraft, scenes),
-    [paragraphs, scenes, state.screenplayDraft],
+    () => buildPairs(paragraphs, screenplayDraft, scenes, sourceId),
+    [paragraphs, scenes, screenplayDraft, sourceId],
   );
-  const hasWorkflowResult = Boolean(state.screenplayDraft);
   const [editedScripts, setEditedScripts] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [copyState, setCopyState] = useState("idle");
@@ -64,7 +111,7 @@ function Comparison() {
     setEditedScripts((current) => {
       const next = {};
       pairs.forEach((pair) => {
-        next[pair.id] = current[pair.id] || pair.script;
+        next[pair.id] = current[pair.id] ?? pair.script;
       });
       return next;
     });
@@ -100,22 +147,24 @@ function Comparison() {
     downloadTextFile("storyflow-screenplay.txt", content);
   }
 
-  if (!hasWorkflowResult) {
-    return (
-      <section className="rounded-xl border border-story-border bg-story-card/95 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
-        <p className="text-sm uppercase tracking-wide text-story-muted">原著对照</p>
-        <h1 className="mt-3 font-serif text-3xl font-semibold">等待生成改编剧本</h1>
-        <p className="mt-4 max-w-2xl text-story-muted">
-          请先回到工作台输入小说并生成剧本，再查看原著内容与改编剧本的对应关系。
-        </p>
-        <Link
-          to="/workspace"
-          className="mt-6 inline-flex rounded-md bg-story-gold px-4 py-2 text-sm font-medium text-story-bg"
-        >
-          返回工作台
-        </Link>
-      </section>
+  function exportYaml(content) {
+    const yaml = generateYaml(
+      {
+        screenplay: {
+          title: state.novelInput.title || "StoryFlow 改编剧本",
+          format: "structured_screenplay",
+        },
+        screenplayText: content,
+        scenes: [],
+      },
+      null,
+      {
+        title: state.novelInput.title || "StoryFlow 改编剧本",
+        novelInput: state.novelInput,
+      },
     );
+
+    downloadTextFile("storyflow-screenplay.yaml", yaml);
   }
 
   return (
@@ -124,8 +173,19 @@ function Comparison() {
         <p className="text-sm uppercase tracking-wide text-story-muted">原著对照</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">原著内容 ↔ 改编剧本</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-story-muted">
-          左侧保留原著阅读语境，右侧展示对应的影视剧本。你可以直接编辑改编文本，并导出为 TXT 或 Markdown。
+          左侧保留原著章节或自然段语境，右侧展示对应的一整段改编剧本。你可以直接编辑右侧内容，并导出 TXT、Markdown 或 YAML。
         </p>
+        {!hasGeneratedResult ? (
+          <div className="mt-4 flex flex-col gap-3 rounded-lg border border-story-gold/30 bg-story-gold/10 px-4 py-3 text-sm text-story-muted md:flex-row md:items-center md:justify-between">
+            <span>当前展示示例对照。生成剧本后，这里会自动替换为你的改编结果。</span>
+            <Link
+              to="/workspace"
+              className="inline-flex w-fit rounded-md bg-story-gold px-3 py-2 text-xs font-medium text-story-bg"
+            >
+              进入工作台
+            </Link>
+          </div>
+        ) : null}
       </section>
 
       <section className="space-y-4">
@@ -135,8 +195,8 @@ function Comparison() {
             <h2 className="mt-1 font-serif text-xl font-semibold">原著内容 ↔ 改编剧本</h2>
           </div>
           <div className="flex flex-wrap gap-3 text-xs text-story-muted">
-            <span className="rounded-full border border-story-border px-3 py-1">{paragraphs.length} 段原著</span>
-            <span className="rounded-full border border-story-border px-3 py-1">{pairs.length} 段改编</span>
+            <span className="rounded-full border border-story-border px-3 py-1">{pairs.length} 组对照</span>
+            <span className="rounded-full border border-story-border px-3 py-1">{scenes.length || pairs.length} 段剧本</span>
             <span className="rounded-full border border-story-gold/60 px-3 py-1 text-story-gold">
               当前：{formatParagraphNumber(pairs.findIndex((pair) => pair.id === activeSceneId) + 1 || 1)}
             </span>
@@ -158,7 +218,7 @@ function Comparison() {
               }`}
               onClick={() => setActiveScene(pair.id)}
             >
-              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.25fr)]">
+              <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.28fr)]">
                 <div className="min-w-0 overflow-hidden rounded-lg border border-story-border bg-story-bg/80 p-4">
                   <span className="text-xs uppercase tracking-wide text-story-muted">
                     {formatParagraphNumber(index + 1)}
@@ -173,12 +233,15 @@ function Comparison() {
                   <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                     <div>
                       <span className="text-xs uppercase tracking-wide text-story-muted">
-                        {pair.scene ? `第${pair.scene.scene_number || index + 1}场` : formatParagraphNumber(index + 1)}
+                        {pair.scene
+                          ? `第${pair.scene.scene_number || index + 1}场`
+                          : formatParagraphNumber(index + 1)}
                       </span>
                       <h3 className="mt-2 font-serif text-xl font-semibold text-story-text">
                         改编剧本
                       </h3>
                     </div>
+
                     <div className="flex flex-wrap gap-2">
                       {isEditing ? (
                         <button
@@ -190,7 +253,7 @@ function Comparison() {
                           className="inline-flex items-center gap-1 rounded-md border border-story-gold/60 px-3 py-2 text-xs text-story-gold transition hover:bg-story-gold/10"
                         >
                           <Save size={14} aria-hidden="true" />
-                          保存
+                          保存修改
                         </button>
                       ) : (
                         <button
@@ -238,6 +301,17 @@ function Comparison() {
                         <Download size={14} aria-hidden="true" />
                         导出 Markdown
                       </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          exportYaml(scriptValue);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md border border-story-border px-3 py-2 text-xs text-story-muted transition hover:border-story-gold hover:text-story-gold"
+                      >
+                        <Download size={14} aria-hidden="true" />
+                        导出 YAML
+                      </button>
                     </div>
                   </div>
 
@@ -251,11 +325,11 @@ function Comparison() {
                           [pair.id]: event.target.value,
                         }))
                       }
-                      rows={12}
+                      rows={14}
                       className="mt-4 w-full resize-y rounded-md border border-story-gold/40 bg-story-card px-3 py-3 font-mono text-sm leading-7 text-story-text outline-none focus:border-story-gold"
                     />
                   ) : (
-                    <pre className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-story-border bg-story-card/70 px-3 py-3 font-mono text-sm leading-7 text-story-text">
+                    <pre className="mt-4 max-h-[560px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-story-border bg-story-card/70 px-3 py-3 font-mono text-sm leading-7 text-story-text">
                       {scriptValue}
                     </pre>
                   )}

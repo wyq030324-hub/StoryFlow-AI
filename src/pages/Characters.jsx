@@ -92,6 +92,17 @@ const filterOptions = [
   },
 ];
 
+const DISPLAY_CENTER = { x: 50, y: 48, z: 48 };
+
+const DISPLAY_RING_SLOTS = [
+  { x: 24, y: 24, z: 24 },
+  { x: 76, y: 24, z: 24 },
+  { x: 18, y: 50, z: 18 },
+  { x: 82, y: 50, z: 18 },
+  { x: 24, y: 72, z: 22 },
+  { x: 76, y: 72, z: 22 },
+];
+
 function findNode(graphData, id) {
   return graphData.nodes.find((node) => node.id === id);
 }
@@ -124,6 +135,70 @@ function getVisibleEdges(graphData, filterMode, activeNodeId) {
   }
 
   return graphData.edges;
+}
+
+function getNodePriority(graphData, node, activeNodeId) {
+  const connectedStrength = graphData.edges
+    .filter((edge) => edgeIncludesNode(edge, node.id) && edgeIncludesNode(edge, activeNodeId))
+    .reduce((sum, edge) => sum + edge.strength + edge.tension / 2, 0);
+
+  return connectedStrength * 10 + (node.importance || 0);
+}
+
+function getFallbackSlot(index) {
+  const extraIndex = Math.max(0, index - DISPLAY_RING_SLOTS.length);
+  const angle = (extraIndex / Math.max(extraIndex + 1, 6)) * Math.PI * 2;
+  const radiusX = 34;
+  const radiusY = 28;
+
+  return {
+    x: Math.round(DISPLAY_CENTER.x + Math.cos(angle) * radiusX),
+    y: Math.round(DISPLAY_CENTER.y + Math.sin(angle) * radiusY),
+    z: 16,
+  };
+}
+
+function getDisplayNodes(graphData, activeNodeId) {
+  const activeNode = findNode(graphData, activeNodeId) || graphData.nodes[0];
+
+  if (!activeNode) {
+    return [];
+  }
+
+  const otherNodes = graphData.nodes
+    .filter((node) => node.id !== activeNode.id)
+    .sort((left, right) => {
+      const rightPriority = getNodePriority(graphData, right, activeNode.id);
+      const leftPriority = getNodePriority(graphData, left, activeNode.id);
+      return rightPriority - leftPriority;
+    });
+
+  const slotByNodeId = new Map();
+
+  otherNodes.forEach((node, index) => {
+    slotByNodeId.set(node.id, DISPLAY_RING_SLOTS[index] || getFallbackSlot(index));
+  });
+
+  return graphData.nodes.map((node) => {
+    if (node.id === activeNode.id) {
+      return {
+        ...node,
+        position3d: DISPLAY_CENTER,
+      };
+    }
+
+    return {
+      ...node,
+      position3d: slotByNodeId.get(node.id) || node.position3d,
+    };
+  });
+}
+
+function getDisplayGraph(graphData, activeNodeId) {
+  return {
+    ...graphData,
+    nodes: getDisplayNodes(graphData, activeNodeId),
+  };
 }
 
 function getNodeMetrics(graphData, nodeId) {
@@ -204,6 +279,10 @@ function Characters() {
   const profileRef = useRevealOnScroll();
   const reportRef = useRevealOnScroll();
 
+  const displayGraph = useMemo(
+    () => getDisplayGraph(graphData, activeNodeId),
+    [graphData, activeNodeId],
+  );
   const activeNode = findNode(graphData, activeNodeId) || graphData.nodes[0];
   const visibleEdges = useMemo(
     () => getVisibleEdges(graphData, filterMode, activeNodeId),
@@ -341,10 +420,14 @@ function Characters() {
             <div ref={nodeGroupRef} className="galaxy-system narrative-graph-system absolute inset-0">
               <svg className="galaxy-lines absolute inset-0 h-full w-full" aria-hidden="true">
                 {visibleEdges.map((edge) => {
-                  const source = findNode(graphData, edge.source);
-                  const target = findNode(graphData, edge.target);
+                  const source = findNode(displayGraph, edge.source);
+                  const target = findNode(displayGraph, edge.target);
                   const meta = edgeTypeMeta[edge.type] || edgeTypeMeta.emotion;
                   const highlighted = isEdgeHighlighted(edge);
+
+                  if (!source || !target) {
+                    return null;
+                  }
 
                   return (
                     <line
@@ -375,11 +458,11 @@ function Characters() {
               </svg>
 
               {visibleEdges.map((edge) => {
-                const source = findNode(graphData, edge.source);
-                const target = findNode(graphData, edge.target);
+                const source = findNode(displayGraph, edge.source);
+                const target = findNode(displayGraph, edge.target);
                 const highlighted = isEdgeHighlighted(edge);
 
-                if (!highlighted) {
+                if (!highlighted || !source || !target) {
                   return null;
                 }
 
@@ -393,14 +476,11 @@ function Characters() {
                     }}
                   >
                     {edge.label}
-                    <span className="ml-2 text-story-muted">
-                      S{edge.strength} / T{edge.tension}
-                    </span>
                   </span>
                 );
               })}
 
-              {graphData.nodes.map((node, index) => {
+              {displayGraph.nodes.map((node, index) => {
                 const isActive = node.id === activeNodeId;
                 const isRelatedToActive = isNodeConnectedTo(graphData, node.id, activeNodeId);
 
@@ -408,7 +488,7 @@ function Characters() {
                   <span
                     key={node.id}
                     className="planet-anchor reveal-child absolute transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-                    style={getNodeStyle(graphData, node, hoveredNodeId, visibleEdges)}
+                    style={getNodeStyle(displayGraph, node, hoveredNodeId, visibleEdges)}
                   >
                     <button
                       type="button"
@@ -585,9 +665,6 @@ function Characters() {
                           <Icon size={14} style={{ color: meta.color }} aria-hidden="true" />
                           {otherNode?.name} / {edge.label}
                         </p>
-                        <span className="text-xs text-story-gold">
-                          S{edge.strength} · T{edge.tension}
-                        </span>
                       </div>
                       <p className="mt-2">{edge.directorMeaning}</p>
                     </li>

@@ -18,11 +18,12 @@ import {
   Wand2,
   X,
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { runDirectorReviewer } from "../agents/directorReviewer.js";
 import { runScreenplayWriter } from "../agents/screenplayWriter.js";
 import { characterGraph as mockCharacterGraph } from "../data/characterGraph.js";
+import { demoNovels } from "../data/demoNovels.js";
 import { AGENT_KEYS, storyActionTypes, useStory } from "../context/StoryContext.jsx";
 import {
   runOptionalCharacterGraph,
@@ -35,6 +36,7 @@ import {
   downloadTextFile,
   formatScreenplay,
 } from "../utils/screenplayFormatter.js";
+import { detectChapters } from "../utils/chapterParser.js";
 import { generateYaml } from "../utils/yamlFormatter.js";
 
 const statusClass = {
@@ -150,6 +152,59 @@ function OptionalResultBlock({ title, children }) {
   );
 }
 
+const MAX_TXT_FILE_SIZE = 500 * 1024;
+
+function countTextLength(text = "") {
+  return String(text || "").replace(/\s/g, "").length;
+}
+
+function stripTxtExtension(fileName = "") {
+  return fileName.replace(/\.txt$/i, "");
+}
+
+function sortFilesNaturally(files) {
+  return [...files].sort((a, b) =>
+    a.name.localeCompare(b.name, "zh-Hans-CN", {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+}
+
+function buildMergedContent(files) {
+  return files
+    .map((file, index) => `第${index + 1}章 ${stripTxtExtension(file.name)}\n\n${file.content.trim()}`)
+    .join("\n\n");
+}
+
+function buildChapterNotice(info) {
+  if (!info?.count) {
+    return {
+      tone: "muted",
+      text: "请输入小说正文后识别章节。",
+    };
+  }
+
+  if (info.hasExplicitChapters && info.count >= 3) {
+    return {
+      tone: "success",
+      text: `✓ 已识别 ${info.count} 章，可生成多章节剧本`,
+    };
+  }
+
+  if (info.hasExplicitChapters) {
+    return {
+      tone: "warning",
+      text: `⚠ 当前仅识别 ${info.count} 章，题目要求建议不少于 3 章`,
+    };
+  }
+
+  return {
+    tone: "info",
+    text: `ℹ 未检测到明确章节标题，已按段落自动识别为 ${info.count} 章`,
+  };
+}
+
 function Studio() {
   const { state, dispatch } = useStory();
   const [aiMode, setAiMode] = useState("real");
@@ -158,6 +213,11 @@ function Studio() {
   const [isYamlVisible, setIsYamlVisible] = useState(false);
   const [optionalLoading, setOptionalLoading] = useState(null);
   const [uploadHint, setUploadHint] = useState("");
+  const [inputMode, setInputMode] = useState("manual");
+  const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [uploadErrors, setUploadErrors] = useState([]);
+  const [chapterInfo, setChapterInfo] = useState(() => detectChapters(""));
+  const [showDemoLibrary, setShowDemoLibrary] = useState(false);
   const screenplayRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -166,6 +226,16 @@ function Studio() {
   const scriptText = useMemo(
     () => formatScreenplay(state.screenplayDraft),
     [state.screenplayDraft],
+  );
+  const yamlText = useMemo(
+    () =>
+      state.screenplayDraft
+        ? generateYaml(state.screenplayDraft, state.reviewResult, {
+            title: state.novelInput.title,
+            novelInput: state.novelInput,
+          })
+        : "",
+    [state.novelInput, state.reviewResult, state.screenplayDraft],
   );
   const scenes = state.screenplayDraft?.scenes || state.scenes || [];
   const dialogueCount = scenes.reduce((total, scene) => total + getDialogues(scene).length, 0);
@@ -179,6 +249,14 @@ function Studio() {
   const adaptationScore = reviewScores.length
     ? Math.round(reviewScores.reduce((sum, score) => sum + score, 0) / reviewScores.length)
     : "待评估";
+  const chapterNotice = buildChapterNotice(chapterInfo);
+  const uploadedTotalWords = uploadedFiles.reduce((total, file) => total + file.wordCount, 0);
+  const scriptWordCount = countTextLength(scriptText);
+  const estimatedSceneCount = scenes.length
+    ? scenes.length
+    : chapterInfo.count
+      ? `${chapterInfo.count * 2}-${chapterInfo.count * 3}`
+      : "待识别";
 
   const pipelineSteps = [
     {
@@ -204,6 +282,14 @@ function Studio() {
     },
   ];
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setChapterInfo(detectChapters(state.novelInput.content));
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [state.novelInput.content]);
+
   function updateNovelInput(payload) {
     dispatch({
       type: storyActionTypes.SET_NOVEL_INPUT,
@@ -211,12 +297,34 @@ function Studio() {
     });
   }
 
-  function loadDemo() {
-    dispatch({ type: storyActionTypes.LOAD_DEMO });
+  function loadDemo(selectedNovel = demoNovels[0]) {
+    if (!selectedNovel) {
+      return;
+    }
+
+    dispatch({ type: storyActionTypes.RESET_WORKFLOW });
+    dispatch({
+      type: storyActionTypes.SET_NOVEL_INPUT,
+      payload: {
+        title: selectedNovel.title,
+        content: selectedNovel.content,
+        paragraphs: selectedNovel.content
+          .split(/\n+/)
+          .map((paragraph) => paragraph.trim())
+          .filter(Boolean),
+        source: "demo",
+        wordCount: countTextLength(selectedNovel.content),
+        styleTags: [selectedNovel.description, selectedNovel.bestFor].filter(Boolean),
+      },
+    });
     setCopyState("idle");
     setScriptCopyState("idle");
     setIsYamlVisible(false);
     setUploadHint("");
+    setInputMode("manual");
+    setUploadedFiles([]);
+    setUploadErrors([]);
+    setShowDemoLibrary(false);
   }
 
   function clearNovelInput() {
@@ -236,35 +344,87 @@ function Studio() {
     setScriptCopyState("idle");
     setIsYamlVisible(false);
     setUploadHint("");
+    setUploadedFiles([]);
+    setUploadErrors([]);
   }
 
-  async function handleDocumentUpload(event) {
-    const file = event.target.files?.[0];
+  function clearUploadedFiles() {
+    setUploadedFiles([]);
+    setUploadErrors([]);
+    setUploadHint("");
+    clearNovelInput();
+  }
+
+  async function processTxtFiles(fileList) {
+    const incomingFiles = sortFilesNaturally(Array.from(fileList || []));
+
+    if (!incomingFiles.length) {
+      return;
+    }
+
+    const errors = [];
+    const validFiles = incomingFiles.filter((file) => {
+      if (!/\.txt$/i.test(file.name)) {
+        errors.push(`${file.name}：仅支持 .txt 格式的文本文件。`);
+        return false;
+      }
+
+      if (file.size > MAX_TXT_FILE_SIZE) {
+        errors.push(`${file.name}：文件过大，建议单章不超过 500KB。`);
+        return false;
+      }
+
+      return true;
+    });
+
+    const loadedFiles = [];
+
+    for (const file of validFiles) {
+      try {
+        const content = await file.text();
+        loadedFiles.push({
+          name: file.name,
+          content,
+          wordCount: countTextLength(content),
+        });
+      } catch {
+        errors.push(`${file.name}：文件读取失败，请检查文件编码是否为 UTF-8。`);
+      }
+    }
+
+    setUploadErrors(errors);
+
+    if (!loadedFiles.length) {
+      setUploadHint("未导入有效 TXT 文件。");
+      return;
+    }
+
+    const mergedContent = buildMergedContent(loadedFiles);
+    const totalWords = countTextLength(mergedContent);
+
+    setUploadedFiles(loadedFiles);
+    setInputMode("upload");
+    updateNovelInput({
+      title: state.novelInput.title || "多章节小说稿",
+      content: mergedContent,
+      source: "upload",
+      wordCount: totalWords,
+    });
+    setUploadHint(`已导入 ${loadedFiles.length} 个 TXT 文件，共 ${totalWords} 字。`);
+  }
+
+  async function handleFileInputChange(event) {
+    await processTxtFiles(event.target.files);
     event.target.value = "";
+  }
 
-    if (!file) {
+  function handleFileDrop(event) {
+    event.preventDefault();
+    if (isRunning) {
       return;
     }
 
-    const extension = file.name.split(".").pop()?.toLowerCase();
-
-    if (extension === "txt") {
-      const content = await file.text();
-      updateNovelInput({
-        title: state.novelInput.title || file.name.replace(/\.txt$/i, ""),
-        content,
-        source: "upload",
-      });
-      setUploadHint("文档内容已导入，可继续编辑后生成剧本。");
-      return;
-    }
-
-    if (extension === "docx") {
-      setUploadHint("Word 文档导入已预留，当前版本请先复制正文或上传 TXT 文档。");
-      return;
-    }
-
-    setUploadHint("当前支持 TXT 文档。Word 文档可先复制正文到输入框。");
+    processTxtFiles(event.dataTransfer.files);
   }
 
   async function runDemoScriptOnly() {
@@ -431,6 +591,18 @@ function Studio() {
     downloadTextFile("storyflow-screenplay.md", `# ${title}\n\n${scriptText}`);
   }
 
+  function exportYaml() {
+    if (!yamlText) {
+      return;
+    }
+
+    dispatch({
+      type: storyActionTypes.SET_GENERATED_YAML,
+      payload: yamlText,
+    });
+    downloadTextFile("storyflow-screenplay.yaml", yamlText);
+  }
+
   function scrollToScreenplay() {
     screenplayRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -439,10 +611,10 @@ function Studio() {
   }
 
   function toggleYaml() {
-    if (!state.generatedYaml && state.screenplayDraft) {
+    if (yamlText) {
       dispatch({
         type: storyActionTypes.SET_GENERATED_YAML,
-        payload: generateYaml(state.screenplayDraft, state.reviewResult),
+        payload: yamlText,
       });
     }
 
@@ -502,13 +674,17 @@ function Studio() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.docx"
-                onChange={handleDocumentUpload}
+                accept=".txt"
+                multiple
+                onChange={handleFileInputChange}
                 className="hidden"
               />
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  setInputMode("upload");
+                  fileInputRef.current?.click();
+                }}
                 disabled={isRunning}
                 className="inline-flex items-center gap-2 rounded-md border border-story-border bg-story-bg px-4 py-3 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -517,12 +693,12 @@ function Studio() {
               </button>
               <button
                 type="button"
-                onClick={loadDemo}
+                onClick={() => setShowDemoLibrary((visible) => !visible)}
                 disabled={isRunning}
                 className="inline-flex items-center gap-2 rounded-md border border-story-border bg-story-bg px-4 py-3 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Database size={16} aria-hidden="true" />
-                加载示例小说
+                示例小说库 {showDemoLibrary ? "▴" : "▾"}
               </button>
               <button
                 type="button"
@@ -549,11 +725,81 @@ function Studio() {
             </div>
           </div>
 
-          <p className="mt-4 text-xs text-story-muted">支持 TXT / Word。当前 TXT 可直接导入，Word 可复制正文后粘贴。</p>
+          {showDemoLibrary ? (
+            <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+              {demoNovels.map((novel) => (
+                <article
+                  key={novel.id}
+                  className="rounded-xl border border-story-border bg-story-card p-4 transition hover:border-story-gold/40"
+                >
+                  <div className="flex h-full flex-col">
+                    <div>
+                      <h3 className="font-serif text-lg font-semibold text-story-gold">
+                        {novel.title}
+                      </h3>
+                      <p className="mt-2 text-sm leading-6 text-story-muted">
+                        {novel.description}
+                      </p>
+                      <p className="mt-3 text-xs leading-5 text-story-muted">
+                        适合展示：{novel.bestFor}
+                      </p>
+                      <p className="mt-2 text-xs text-story-muted">
+                        {novel.chapterCount} 章 · {countTextLength(novel.content)} 字
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => loadDemo(novel)}
+                      disabled={isRunning}
+                      className="mt-4 inline-flex items-center justify-center rounded-md border border-story-gold/40 bg-story-gold/10 px-3 py-2 text-xs font-medium text-story-gold transition hover:bg-story-gold/15 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      加载此示例
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-5 inline-flex rounded-lg border border-story-border bg-story-bg p-1 text-sm">
+            {[
+              ["manual", "手动输入"],
+              ["upload", "上传文件"],
+            ].map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setInputMode(mode)}
+                disabled={isRunning}
+                className={`rounded-md px-4 py-2 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  inputMode === mode
+                    ? "bg-story-gold text-story-bg"
+                    : "text-story-muted hover:text-story-text"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <p className="mt-4 text-xs text-story-muted">支持多个 TXT 文件。每个文件会作为一章合并，导入后仍可继续编辑。</p>
           {uploadHint ? (
             <p className="mt-2 rounded-md border border-story-gold/40 bg-story-gold/10 px-3 py-2 text-xs text-story-gold">
               {uploadHint}
             </p>
+          ) : null}
+          {state.novelInput.content.trim() ? (
+            <div
+              className={`mt-3 rounded-md border px-3 py-3 text-xs leading-6 ${
+                chapterNotice.tone === "success"
+                  ? "border-story-gold/50 bg-story-gold/10 text-story-gold"
+                  : chapterNotice.tone === "warning"
+                    ? "border-amber-400/40 bg-amber-950/20 text-amber-200"
+                    : "border-story-border bg-story-bg/70 text-story-muted"
+              }`}
+            >
+              {chapterNotice.text}
+            </div>
           ) : null}
 
           <label htmlFor="novel-title" className="mt-6 block text-sm font-medium text-story-text">
@@ -568,18 +814,111 @@ function Studio() {
             placeholder="输入作品标题或章节名"
           />
 
-          <label htmlFor="novel-content" className="mt-5 block text-sm font-medium text-story-text">
-            小说正文
-          </label>
-          <textarea
-            id="novel-content"
-            value={state.novelInput.content}
-            onChange={(event) => updateNovelInput({ content: event.target.value })}
-            disabled={isRunning}
-            rows={14}
-            className="mt-2 w-full resize-y rounded-md border border-story-border bg-story-bg px-3 py-3 text-sm leading-7 text-story-text outline-none transition placeholder:text-story-muted focus:border-story-gold disabled:opacity-60"
-            placeholder="粘贴小说片段，或上传 TXT 文档"
-          />
+          {inputMode === "manual" ? (
+            <>
+              <label htmlFor="novel-content" className="mt-5 block text-sm font-medium text-story-text">
+                小说正文
+              </label>
+              <textarea
+                id="novel-content"
+                value={state.novelInput.content}
+                onChange={(event) => updateNovelInput({ content: event.target.value })}
+                disabled={isRunning}
+                rows={14}
+                className="mt-2 w-full resize-y rounded-md border border-story-border bg-story-bg px-3 py-3 text-sm leading-7 text-story-text outline-none transition placeholder:text-story-muted focus:border-story-gold disabled:opacity-60"
+                placeholder="粘贴小说正文，支持包含第一章、第二章、Chapter 1 等章节标题"
+              />
+            </>
+          ) : (
+            <div className="mt-5 space-y-4">
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    fileInputRef.current?.click();
+                  }
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleFileDrop}
+                className="rounded-xl border border-dashed border-story-gold/40 bg-story-bg/80 px-5 py-8 text-center transition hover:border-story-gold hover:bg-story-gold/5"
+              >
+                <FileUp className="mx-auto text-story-gold" size={28} aria-hidden="true" />
+                <p className="mt-3 font-serif text-xl text-story-text">拖拽 TXT 文件到这里</p>
+                <p className="mt-2 text-sm text-story-muted">
+                  支持多个 .txt 文件，每个文件会按文件名排序并作为一章合并。
+                </p>
+                <button
+                  type="button"
+                  disabled={isRunning}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-4 inline-flex items-center justify-center rounded-md bg-story-gold px-4 py-2 text-sm font-semibold text-story-bg transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  选择 TXT 文件
+                </button>
+              </div>
+
+              {uploadedFiles.length ? (
+                <div className="rounded-lg border border-story-border bg-story-bg/70 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-story-text">已上传文件</p>
+                      <p className="mt-1 text-xs text-story-muted">
+                        共 {uploadedFiles.length} 个文件，{uploadedTotalWords} 字，已识别 {chapterInfo.count} 章
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearUploadedFiles}
+                      disabled={isRunning}
+                      className="inline-flex items-center gap-2 rounded-md border border-story-border px-3 py-2 text-xs text-story-muted transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Eraser size={14} aria-hidden="true" />
+                      清除文件
+                    </button>
+                  </div>
+                  <ul className="mt-4 space-y-2">
+                    {uploadedFiles.map((file, index) => (
+                      <li
+                        key={`${file.name}-${index}`}
+                        className="flex items-center justify-between gap-3 rounded-md border border-story-border bg-story-card/70 px-3 py-2 text-xs"
+                      >
+                        <span className="min-w-0 truncate text-story-text">
+                          第{index + 1}章 {file.name}
+                        </span>
+                        <span className="shrink-0 text-story-muted">{file.wordCount} 字</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {uploadErrors.length ? (
+                <div className="rounded-lg border border-amber-400/40 bg-amber-950/20 px-4 py-3 text-xs leading-6 text-amber-200">
+                  {uploadErrors.map((error) => (
+                    <p key={error}>{error}</p>
+                  ))}
+                </div>
+              ) : null}
+
+              <label htmlFor="novel-content-upload-preview" className="block text-sm font-medium text-story-text">
+                合并后的小说正文
+              </label>
+              <textarea
+                id="novel-content-upload-preview"
+                value={state.novelInput.content}
+                onChange={(event) => updateNovelInput({ content: event.target.value })}
+                disabled={isRunning}
+                rows={10}
+                className="w-full resize-y rounded-md border border-story-border bg-story-bg px-3 py-3 text-sm leading-7 text-story-text outline-none transition placeholder:text-story-muted focus:border-story-gold disabled:opacity-60"
+                placeholder="上传 TXT 文件后，将在这里生成多章节正文。"
+              />
+            </div>
+          )}
         </article>
 
         <ModeSwitch value={aiMode} onChange={setAiMode} disabled={isRunning} />
@@ -688,6 +1027,15 @@ function Studio() {
             >
               <Download size={16} aria-hidden="true" />
               导出 Markdown
+            </button>
+            <button
+              type="button"
+              onClick={exportYaml}
+              disabled={!yamlText}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={16} aria-hidden="true" />
+              导出 YAML
             </button>
           </div>
         </div>
@@ -849,18 +1197,13 @@ function Studio() {
       <section>
         <div className="mb-4">
           <p className="text-sm text-story-gold">Overview</p>
-          <h2 className="mt-1 font-serif text-2xl font-semibold">项目数据概览</h2>
+          <h2 className="mt-1 font-serif text-2xl font-semibold">项目数据预览</h2>
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <StatCard label="人物数" value={characterCount} icon={UsersRound} />
-          <StatCard label="场景数" value={scenes.length || "文本"} icon={ScrollText} />
-          <StatCard label="对白数" value={dialogueCount || "待解析"} icon={Clipboard} />
-          <StatCard
-            label="情感峰值"
-            value={state.reviewResult?.scores?.emotion_score || "待检测"}
-            icon={Activity}
-          />
-          <StatCard label="改编评分" value={adaptationScore} icon={BadgeCheck} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="已识别章节数" value={`${chapterInfo.count || 0} 章`} icon={ScrollText} />
+          <StatCard label="预计场次数" value={estimatedSceneCount} icon={Clipboard} />
+          <StatCard label="剧本文字数" value={scriptWordCount || "待生成"} icon={FileCode2} />
+          <StatCard label="可导出格式" value="TXT / MD / YAML" icon={Download} />
         </div>
       </section>
 
