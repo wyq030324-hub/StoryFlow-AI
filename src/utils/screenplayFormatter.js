@@ -42,6 +42,14 @@ function sanitizeScriptLine(value = "") {
   return text;
 }
 
+function sanitizeScriptText(value = "") {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map(sanitizeScriptLine)
+    .filter(Boolean)
+    .join("\n");
+}
+
 function getSceneHeading(scene) {
   const heading = scene.heading || {};
   const sceneType = normalizeSceneType(scene.scene_type || scene.int_ext || heading.int_ext);
@@ -92,6 +100,17 @@ export function formatSceneHeading(scene) {
 }
 
 export function formatScreenplay(screenplayDraft) {
+  const scriptText =
+    screenplayDraft?.screenplayText ||
+    screenplayDraft?.screenplay_text ||
+    screenplayDraft?.script ||
+    screenplayDraft?.content ||
+    "";
+
+  if (scriptText) {
+    return sanitizeScriptText(scriptText);
+  }
+
   const scenes = screenplayDraft?.scenes || [];
 
   if (!scenes.length) {

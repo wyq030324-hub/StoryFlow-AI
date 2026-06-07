@@ -32,6 +32,17 @@ export const AGENT_FLOW = [
   AGENT_KEYS.yamlExporter,
 ];
 
+export const SCRIPT_ONLY_FLOW = [
+  AGENT_KEYS.screenplayWriter,
+];
+
+export const OPTIONAL_ANALYSIS_FLOW = [
+  AGENT_KEYS.originalAnalyzer,
+  AGENT_KEYS.adaptationPlanner,
+  AGENT_KEYS.directorReviewer,
+  AGENT_KEYS.yamlExporter,
+];
+
 export const storyActionTypes = {
   SET_NOVEL_INPUT: "SET_NOVEL_INPUT",
   LOAD_DEMO: "LOAD_DEMO",
@@ -43,6 +54,9 @@ export const storyActionTypes = {
   SET_ADAPTATION_PLAN: "SET_ADAPTATION_PLAN",
   SET_SCREENPLAY_DRAFT: "SET_SCREENPLAY_DRAFT",
   SET_REVIEW_RESULT: "SET_REVIEW_RESULT",
+  SET_CHARACTER_GRAPH: "SET_CHARACTER_GRAPH",
+  SET_DIRECTOR_ROOM: "SET_DIRECTOR_ROOM",
+  SET_REWRITE_SUGGESTIONS: "SET_REWRITE_SUGGESTIONS",
   SET_GENERATED_YAML: "SET_GENERATED_YAML",
   SET_ACTIVE_SCENE: "SET_ACTIVE_SCENE",
   RESET_WORKFLOW: "RESET_WORKFLOW",
@@ -74,6 +88,7 @@ function workflowBaseState() {
     reviewResult: null,
     characterGraph: null,
     directorRoom: null,
+    rewriteSuggestions: null,
     activeSceneId: null,
     workflowStep: "novelInput",
     scenes: [],
@@ -219,6 +234,21 @@ function storyReducer(state, action) {
         reviewResult: action.payload?.reviewResult || action.payload,
         characterGraph: action.payload?.characterGraph || state.characterGraph,
         directorRoom: action.payload?.directorRoom || state.directorRoom,
+      });
+    case storyActionTypes.SET_CHARACTER_GRAPH:
+      return withTimestamp({
+        ...state,
+        characterGraph: action.payload,
+      });
+    case storyActionTypes.SET_DIRECTOR_ROOM:
+      return withTimestamp({
+        ...state,
+        directorRoom: action.payload,
+      });
+    case storyActionTypes.SET_REWRITE_SUGGESTIONS:
+      return withTimestamp({
+        ...state,
+        rewriteSuggestions: action.payload,
       });
     case storyActionTypes.SET_GENERATED_YAML:
       return withTimestamp({
