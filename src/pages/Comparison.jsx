@@ -9,6 +9,7 @@ import {
   formatScreenplay,
   splitScreenplayIntoSections,
 } from "../utils/screenplayFormatter.js";
+import { generateYaml } from "../utils/yamlFormatter.js";
 
 function getSceneId(scene, index) {
   return scene?.scene_id || scene?.id || `part-${index + 1}`;
@@ -100,6 +101,26 @@ function Comparison() {
     downloadTextFile("storyflow-screenplay.txt", content);
   }
 
+  function exportYaml(content) {
+    const yaml = generateYaml(
+      {
+        screenplay: {
+          title: state.novelInput.title || "StoryFlow 改编剧本",
+          format: "structured_screenplay",
+        },
+        screenplayText: content,
+        scenes: [],
+      },
+      null,
+      {
+        title: state.novelInput.title || "StoryFlow 改编剧本",
+        novelInput: state.novelInput,
+      },
+    );
+
+    downloadTextFile("storyflow-screenplay.yaml", yaml);
+  }
+
   if (!hasWorkflowResult) {
     return (
       <section className="rounded-xl border border-story-border bg-story-card/95 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.24)]">
@@ -124,7 +145,7 @@ function Comparison() {
         <p className="text-sm uppercase tracking-wide text-story-muted">原著对照</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold">原著内容 ↔ 改编剧本</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-story-muted">
-          左侧保留原著阅读语境，右侧展示对应的影视剧本。你可以直接编辑改编文本，并导出为 TXT 或 Markdown。
+          左侧保留原著阅读语境，右侧展示对应的影视剧本。你可以直接编辑改编文本，并导出 TXT、Markdown 或结构化 YAML。
         </p>
       </section>
 
@@ -237,6 +258,17 @@ function Comparison() {
                       >
                         <Download size={14} aria-hidden="true" />
                         导出 Markdown
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          exportYaml(scriptValue);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md border border-story-border px-3 py-2 text-xs text-story-muted transition hover:border-story-gold hover:text-story-gold"
+                      >
+                        <Download size={14} aria-hidden="true" />
+                        导出 YAML
                       </button>
                     </div>
                   </div>

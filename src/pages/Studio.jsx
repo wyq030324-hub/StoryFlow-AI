@@ -35,6 +35,7 @@ import {
   downloadTextFile,
   formatScreenplay,
 } from "../utils/screenplayFormatter.js";
+import { detectChapters } from "../utils/chapterParser.js";
 import { generateYaml } from "../utils/yamlFormatter.js";
 
 const statusClass = {
@@ -166,6 +167,20 @@ function Studio() {
   const scriptText = useMemo(
     () => formatScreenplay(state.screenplayDraft),
     [state.screenplayDraft],
+  );
+  const chapterInfo = useMemo(
+    () => detectChapters(state.novelInput.content),
+    [state.novelInput.content],
+  );
+  const yamlText = useMemo(
+    () =>
+      state.screenplayDraft
+        ? generateYaml(state.screenplayDraft, state.reviewResult, {
+            title: state.novelInput.title,
+            novelInput: state.novelInput,
+          })
+        : "",
+    [state.novelInput, state.reviewResult, state.screenplayDraft],
   );
   const scenes = state.screenplayDraft?.scenes || state.scenes || [];
   const dialogueCount = scenes.reduce((total, scene) => total + getDialogues(scene).length, 0);
@@ -431,6 +446,18 @@ function Studio() {
     downloadTextFile("storyflow-screenplay.md", `# ${title}\n\n${scriptText}`);
   }
 
+  function exportYaml() {
+    if (!yamlText) {
+      return;
+    }
+
+    dispatch({
+      type: storyActionTypes.SET_GENERATED_YAML,
+      payload: yamlText,
+    });
+    downloadTextFile("storyflow-screenplay.yaml", yamlText);
+  }
+
   function scrollToScreenplay() {
     screenplayRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -439,10 +466,10 @@ function Studio() {
   }
 
   function toggleYaml() {
-    if (!state.generatedYaml && state.screenplayDraft) {
+    if (yamlText) {
       dispatch({
         type: storyActionTypes.SET_GENERATED_YAML,
-        payload: generateYaml(state.screenplayDraft, state.reviewResult),
+        payload: yamlText,
       });
     }
 
@@ -554,6 +581,19 @@ function Studio() {
             <p className="mt-2 rounded-md border border-story-gold/40 bg-story-gold/10 px-3 py-2 text-xs text-story-gold">
               {uploadHint}
             </p>
+          ) : null}
+          {state.novelInput.content.trim() ? (
+            <div className="mt-3 rounded-md border border-story-border bg-story-bg/70 px-3 py-3 text-xs leading-6 text-story-muted">
+              {chapterInfo.hasExplicitChapters && chapterInfo.count >= 3 ? (
+                <span className="text-story-gold">
+                  已识别章节数：{chapterInfo.count}章，当前将按章节生成剧本初稿。
+                </span>
+              ) : chapterInfo.isAutoSplit ? (
+                <span>未检测到明确章节标题，已按段落自动拆分。</span>
+              ) : (
+                <span>已识别章节数：{chapterInfo.count}章。</span>
+              )}
+            </div>
           ) : null}
 
           <label htmlFor="novel-title" className="mt-6 block text-sm font-medium text-story-text">
@@ -688,6 +728,15 @@ function Studio() {
             >
               <Download size={16} aria-hidden="true" />
               导出 Markdown
+            </button>
+            <button
+              type="button"
+              onClick={exportYaml}
+              disabled={!yamlText}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-story-border px-4 py-2 text-sm text-story-text transition hover:border-story-gold hover:text-story-gold disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download size={16} aria-hidden="true" />
+              导出 YAML
             </button>
           </div>
         </div>
